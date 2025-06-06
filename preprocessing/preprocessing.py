@@ -56,7 +56,7 @@ def process_ppg_wave(wave):
 def compute_derivatives_pyppg(ensemble_wave, fs=1000):
     """
     Repeat the (processed) ensemble wave 20 times,
-    run pyPPG.Preprocessing to compute derivatives,
+    run pyPPG.Preprocess to compute derivatives,
     and then extract the 11th wave (index 10).
     """
     repeated = np.tile(ensemble_wave, 20)
@@ -68,9 +68,9 @@ def compute_derivatives_pyppg(ensemble_wave, fs=1000):
     s.fs = fs
     s.name = "temp_signal"
     try:
-        ppg, vpg, apg, jpg = PP.Preprocessing(s, filtering=True)
+        ppg, vpg, apg, jpg = PP.Preprocess().get_signals(s) # , filtering=True)
     except Exception as e:
-        print("Error in PP.Preprocessing:", e)
+        print("Error in PP.Preprocess:", e)
         # Return zeros if processing fails
         zeros = np.zeros(len(ensemble_wave))
         return zeros, zeros, zeros, zeros
@@ -82,6 +82,7 @@ def compute_derivatives_pyppg(ensemble_wave, fs=1000):
     apg_11 = apg[start_idx:end_idx]
     jpg_11 = jpg[start_idx:end_idx]
     return ppg_11, vpg_11, apg_11, jpg_11
+
 
 def process_with_pyPPG_for_subject(subj_data, pid):
     """
@@ -95,22 +96,53 @@ def process_with_pyPPG_for_subject(subj_data, pid):
     s.v = subj_data["raw_optical"]
     s.fs = subj_data["sampling_rate"]
     s.name = str(pid)
-    # ppg, vpg, apg, jpg = PP.Preprocessing(s, filtering=True)
-    ppg, vpg, apg, jpg = PP.Preprocess().get_signals(s) # , filtering=True)
+    s.filtering = True                # required by the new Preprocess class
+
+    # ── 1.  run the new pre-processing code you pasted ────────────────────────
+    ppg, vpg, apg, jpg = PP.Preprocess().get_signals(s)
+
+    # stash the derivatives on DotMap (rest of the pipeline uses these names)
     s.filt_sig = ppg
-    s.filt_d1 = vpg
-    s.filt_d2 = apg
-    s.filt_d3 = jpg
-    dt = 1.0 / subj_data["sampling_rate"]
+    s.filt_d1  = vpg
+    s.filt_d2  = apg
+    s.filt_d3  = jpg
+    dt = 1.0 / s.fs
+    # print("s.filt_sig", s.fs, s.filt_sig.shape)
+
     spg = np.gradient(s.filt_d3, dt)
-    # Create a correction DataFrame (required by pyPPG)
-    corr_on = ['on', 'dn', 'dp', 'v', 'w', 'f']
-    s.correction = pd.DataFrame([[True]*len(corr_on)], columns=corr_on)
+
+    # ── 2.  make sure the PPG object exposes the attrs FpCollection expects ── 
+
+    # Check if the signal is long enough for processing -> if not, continue with next subject and save information in csv file. Otherwise, pyPPG will throw an error.
+    if len(s.filt_sig) <= s.fs*15: 
+        print(f"Skipping subject {pid} due to insufficient signal length.")
+        # log into a CSV file 
+        with open(PREPROCESSED_AURORA_DATA_PATH + "/skipped_subjects.csv", "a") as f:
+            f.write(f"{pid}, {len(s.filt_sig)}\n")
+        return None
+
     ppg_class = PPG(s)
-    fpex = FP.FpCollection(ppg_class)
-    fiducials = fpex.get_fiducials(ppg_class)
-    return {"ppg": s.filt_sig, "vpg": s.filt_d1, "apg": s.filt_d2, "jpg": s.filt_d3,
-            "spg": spg, "fiducials": fiducials}
+    ppg_class.ppg = s.filt_sig        # 0-th derivative
+    ppg_class.vpg = s.filt_d1         # 1-st derivative
+    ppg_class.apg = s.filt_d2         # 2-nd derivative
+    ppg_class.jpg = s.filt_d3         # 3-rd derivative
+            
+    # pyPPG’s fiducial extractor needs a “correction” DataFrame on s
+    corr_cols = ['on', 'dn', 'dp', 'v', 'w', 'f']
+    s.correction = pd.DataFrame([[True]*len(corr_cols)], columns=corr_cols)
+
+    # ── 3.  extract fiducials ────────────────────────────────────────────────
+    fiducials = FP.FpCollection(ppg_class).get_fiducials(ppg_class)
+
+    return {
+        "ppg": s.filt_sig,
+        "vpg": s.filt_d1,
+        "apg": s.filt_d2,
+        "jpg": s.filt_d3,
+        "spg": spg,
+        "fiducials": fiducials
+    }
+
 
 def assign_bin_edges(value, bin_edges):
     """
@@ -123,7 +155,6 @@ def assign_bin_edges(value, bin_edges):
             return i
     return None
 
-# --- Data Loading Functions ---
 
 def load_data(raw_path, dataset_type="oscillometric"):
     """
@@ -221,6 +252,10 @@ def process_all_subjects(data_dict):
         if "raw_optical" not in subj_data or "sampling_rate" not in subj_data:
             continue
         out = process_with_pyPPG_for_subject(subj_data, pid)
+        # If processing fails (e.g. due to short signal), skip this subject
+        if out is None:
+            continue
+
         subj_data["ppg"] = out["ppg"]
         subj_data["vpg"] = out["vpg"]
         subj_data["apg"] = out["apg"]
@@ -407,10 +442,8 @@ def save_final_dict(data_dict, output_file):
 
 # --- Optional: Merge datasets function (if you wish to merge oscillometric and auscultatory) ---
 def merge_datasets_and_add_regressors(data_path):
-    # data_osc = torch.load(data_path / "data_dict_aurora_osc.pt", weights_only=False)
-    data_osc = torch.load(data_path / "data_dict_aurora_final_oscillometric_2.pt", weights_only=False)
-    # data_auc = torch.load(data_path / "data_dict_aurora_auc.pt", weights_only=False)
-    data_auc = torch.load(data_path / "data_dict_aurora_final_auscultatory_2.pt", weights_only=False)
+    data_osc = torch.load(data_path / "data_dict_oscillometric.pt", weights_only=False)
+    data_auc = torch.load(data_path / "data_dict_auscultatory.pt", weights_only=False)
     
     data_dict = {**data_osc, **data_auc}
     for pid, entry in data_dict.items():
@@ -427,10 +460,33 @@ def merge_datasets_and_add_regressors(data_path):
             entry["bmi"] = None
             entry["height_m"] = None
             entry["weight_kg"] = None
-    out_path = data_path / "data_dict_osc_auc_with_derivatives_2.pt"
+    out_path = data_path / "data_dict_osc_auc_with_derivatives.pt"
     torch.save(data_dict, out_path)
     print(f"Saved merged data_dict with derivatives to: {out_path}")
     return data_dict
+
+
+def pipeline(dataset_type, raw_path, preprocessed_path):
+    print(f"Processing {dataset_type} data.")
+    
+    print("Step 1: Load metadata and get waveform folder based on dataset type")
+    no_comorb_df, waveform_base_path = load_data(raw_path=raw_path, dataset_type=dataset_type)
+    
+    print("Step 2: Create dictionary for each participant")
+    data_dict = create_data_dict(no_comorb_df, waveform_base_path)
+    
+    print("Step 3: Process each subject's raw optical signal with pyPPG (initial derivatives)")
+    data_dict = process_all_subjects(data_dict)
+    
+    print("Step 4: Split into individual waves, compute ensemble wave, average HR, and compute derivatives")
+    data_dict = step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resample_length=1000, tolerance=0.6, lower_threshold=-0.1)
+    
+    print("Step 5: Save final dictionary")
+    final_file = preprocessed_path / f"data_dict_{dataset_type}.pt"
+    save_final_dict(data_dict, final_file)
+
+    return "completed - saved as " + str(final_file)
+
 
 # --- Main Execution ---
 
@@ -443,55 +499,14 @@ def main():
     # output_pt = base_path / "preprocessed"
     
     # Choose dataset type: "oscillometric" or "auscultatory"
-    print("Starting with oscillometric data.")
-    dataset_type = "oscillometric"  # Change as needed
-    # D:\00_ppg_project\aurora_data\raw\measurements_auscultatory\measurements_auscultatory
+    print(pipeline(dataset_type="oscillometric", 
+                    raw_path=raw_path,
+                    preprocessed_path = preprocessed_path))
     
-    print("Step 1: Load metadata and get waveform folder based on dataset type")
-    no_comorb_df, waveform_base_path = load_data(raw_path=raw_path, dataset_type=dataset_type)
-    
-    print("Step 2: Create dictionary for each participant")
-    data_dict = create_data_dict(no_comorb_df, waveform_base_path)
-    
-    print("Step 3: Process each subject's raw optical signal with pyPPG (initial derivatives)")
-    data_dict = process_all_subjects(data_dict)
-    
-    print("Step 4: Split into individual waves, compute ensemble wave, average HR, and compute derivatives")
-    data_dict = step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resample_length=1000, tolerance=0.6, lower_threshold=-0.1)
-    
-    print("Step 5: Save final dictionary")
-    final_file = preprocessed_path / f"data_dict_{dataset_type}_2.pt"
-    save_final_dict(data_dict, final_file)
-    
-    # Release memory from oscillometric processing
-    del no_comorb_df, waveform_base_path, data_dict
-    
-    # --- 
-    
-    print("Starting with auscultatory data.")
+    print(pipeline(dataset_type="auscultatory", 
+                    raw_path=raw_path,
+                    preprocessed_path = preprocessed_path))
 
-    dataset_type = "auscultatory"  # Change as needed
-
-
-    print("Step 1: Load metadata and get waveform folder based on dataset type")
-    no_comorb_df, waveform_base_path = load_data(raw_path=raw_path, dataset_type=dataset_type)
-    
-    print("Step 2: Create dictionary for each participant")
-    data_dict = create_data_dict(no_comorb_df, waveform_base_path)
-    
-    print("Step 3: Process each subject's raw optical signal with pyPPG (initial derivatives)")
-    data_dict = process_all_subjects(data_dict)
-    
-    print("Step 4: Split into individual waves, compute ensemble wave, average HR, and compute derivatives")
-    data_dict = step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resample_length=1000, tolerance=0.6, lower_threshold=-0.1)
-    
-    print("Step 5: Save final dictionary")
-    final_file = preprocessed_path / f"data_dict_aurora_final_{dataset_type}_2.pt"
-    save_final_dict(data_dict, final_file)
-    
-    # Release memory after auscultatory processing if no longer needed
-    del no_comorb_df, waveform_base_path, data_dict
-    
     print("Merging datasets and adding regressors.")
     merge_datasets_and_add_regressors(preprocessed_path)
 
