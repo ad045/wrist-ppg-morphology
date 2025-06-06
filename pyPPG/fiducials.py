@@ -58,7 +58,7 @@ class FpCollection:
         # Merge Fiducial Points
         keys=('on', 'sp', 'dn','dp')
         dummy = np.empty(len(peaks))
-        dummy.fill(np.NaN)
+        dummy.fill(np.nan)
         n=0
         for temp_val in (onsets,peaks,dicroticnotch,diastolicpeak):
             ppg_fp[keys[n]] = dummy
@@ -158,7 +158,7 @@ class FpCollection:
         # detect peaks in windows
         all_p4 = []
         all_hr = np.empty(len(win_starts)-1)
-        all_hr [:] = np.NaN
+        all_hr [:] = np.nan 
         hr_past = 0 # the actual heart rate
         hrvi = 0    # heart rate variability index
 
@@ -608,7 +608,7 @@ class FpCollection:
         """
 
         p4 = np.empty(len(p2))
-        p4[:] = np.NaN
+        p4[:] = np.nan
         for k in range(0,len(p2)):
             rel_el = np.where(p3>p2[k])
             if np.any(rel_el) and ~np.isnan(rel_el[0][0]):
@@ -642,7 +642,7 @@ class FpCollection:
 
         #Correct peaks' location error due to pre-processing
         pc = np.empty(len(p))
-        pc[:] = np.NaN
+        pc[:] = np.nan
         pc1=[]
         for k in range(0,len(p)):
             temp_pk=abs(m - p[k])
@@ -841,7 +841,7 @@ class FpCollection:
             if len(peaks)>1:
                 t_w=t_wmax(i, peaks, onsets)
             else:
-                t_w=np.NaN
+                t_w=np.nan
 
             if t_w!=T_beat:
                 tau_wmax=(t_w-t_Pmax)/(T_beat-t_Pmax)
@@ -889,7 +889,7 @@ class FpCollection:
         """
 
         nan_v = np.empty(len(dicroticnotch))
-        nan_v[:] = np.NaN
+        nan_v[:] = np.nan
         diastolicpeak = nan_v
 
         for i in range(0,len(dicroticnotch)):
@@ -934,7 +934,7 @@ class FpCollection:
         dx = self.vpg
 
         nan_v = np.empty(len(onsets)-1)
-        nan_v[:] = np.NaN
+        nan_v[:] = np.nan
         u, v, w = copy.deepcopy(nan_v),copy.deepcopy(nan_v),copy.deepcopy(nan_v),
 
         for i in range(0,len(onsets)-1):
@@ -989,7 +989,7 @@ class FpCollection:
         dddx = self.jpg
 
         nan_v = np.empty(len(onsets)-1)
-        nan_v[:] = np.NaN
+        nan_v[:] = np.nan
         a, b, c, d, e, f = copy.deepcopy(nan_v),copy.deepcopy(nan_v),copy.deepcopy(nan_v),copy.deepcopy(nan_v),copy.deepcopy(nan_v),copy.deepcopy(nan_v)
         for i in range(0,len(onsets)-1):
 
@@ -1095,7 +1095,7 @@ class FpCollection:
         dddx = self.jpg
 
         nan_v = np.empty(len(onsets)-1)
-        nan_v[:] = np.NaN
+        nan_v[:] = np.nan
         p1, p2 = copy.deepcopy(nan_v), copy.deepcopy(nan_v)
 
         for i in range(0, len(onsets) - 1):
