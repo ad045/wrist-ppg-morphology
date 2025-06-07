@@ -218,32 +218,24 @@ plt.show()
 # ─────────────────────────────────────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(6.5, 4))
 
-# targets = [("pyppg_finger",   "PyPPG-finger"),
-#            ("neurokit_finger","NeuroKit-finger"),
-#            ("custom_wrist",   "Custom-wrist")]
+# CHANGE THIS TO TRUE IF YOU WANT TO SEE THE NUMBER OF SAMPLES IN THE LEGEND
+with_number_samples = False
 
-# targets = [("pyppg_finger",   "PyPPG-finger"),
-#            ("neurokit_finger","NeuroKit-finger"),
-#            ("custom_wrist",   "Custom-wrist"), 
+if with_number_samples: 
+    targets = [("pyppg_finger",   f"Finger: PyPPG (N={len(samples['pyppg_finger'])})"),
+        ("neurokit_finger",f"Finger: NeuroKit2 (N={len(samples['neurokit_finger'])})"),
+        ("custom_finger",  f"Finger: Custom (N={len(samples['custom_finger'])})"),
+        ("pyppg_wrist",    f"Wrist: PyPPG (N={len(samples['pyppg_wrist'])})"),
+        ("neurokit_wrist", f"Wrist: NeuroKit2 (N={len(samples['neurokit_wrist'])})"), 
+        ("custom_wrist",   f"Wrist: Custom (N={len(samples['custom_wrist'])})")]
 
-#            ("custom_finger",  "Custom-finger"), 
-#            ("pyppg_wrist",    "PyPPG-wrist"),
-#            ("neurokit_wrist", "NeuroKit-wrist")]
-
-
-targets = [("pyppg_finger",   f"Finger: PyPPG (N={len(samples['pyppg_finger'])})"),
-           ("neurokit_finger",f"Finger: NeuroKit2 (N={len(samples['neurokit_finger'])})"),
-           ("custom_wrist",   f"Wrist: Custom (N={len(samples['custom_wrist'])})"),
-           ("custom_finger",  f"Finger: Custom (N={len(samples['custom_finger'])})"),
-           ("pyppg_wrist",    f"Wrist: PyPPG (N={len(samples['pyppg_wrist'])})"),
-           ("neurokit_wrist", f"Wrist: NeuroKit2 (N={len(samples['neurokit_wrist'])})")]
-
-# targets = [("pyppg_finger",   "Finger: PyPPG"),
-        #    ("neurokit_finger","Finger: NeuroKit2"),
-        #    ("custom_finger",  "Finger: Custom"), 
-        #    ("pyppg_wrist",    "Wrist: PyPPG"),
-        #    ("neurokit_wrist", "Wrist: NeuroKit2"), 
-        #    ("custom_wrist",   "Wrist: Custom"), ]
+else: 
+    targets = [("pyppg_finger",   "Finger: PyPPG"),
+        ("neurokit_finger","Finger: NeuroKit2"),
+        ("custom_finger",  "Finger: Custom"), 
+        ("pyppg_wrist",    "Wrist: PyPPG"),
+        ("neurokit_wrist", "Wrist: NeuroKit2"), 
+        ("custom_wrist",   "Wrist: Custom"), ]
 
 x_grid = np.linspace(200, 1800, 800)
 
@@ -263,10 +255,15 @@ for key, label in targets:
 
 ax.set_xlabel("PW duration [ms]")
 ax.set_ylabel("Density")
-ax.set_title("Distributions of the wave durations detected")
+ax.set_title("Durations of the detected waves")
 ax.legend(frameon=False)
 ax.set_xlim(400, 1400)          # zoom into the informative region
 plt.tight_layout()
-plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / "overlay_closest_distributions.png", dpi=300)
-plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / "overlay_closest_distributions.pdf")
+
+# Save the figure
+file_name = "overlay_closest_distributions"
+if with_number_samples:
+    file_name += "_with_number_samples"
+plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / (file_name + ".png"), dpi=300)
+plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / (file_name + ".pdf"))
 plt.show()
