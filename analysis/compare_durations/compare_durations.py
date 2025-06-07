@@ -95,10 +95,11 @@ from itertools import combinations
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde, entropy
-import seaborn as sns            # prettier heat-map
+import seaborn as sns            
 
-from initialize import PREPROCESSED_MAUS_DATA_PATH
+from initialize import PREPROCESSED_MAUS_DATA_PATH, OUTPUT_COMPARISON_ALGOS_PATH
 BASE = Path(PREPROCESSED_MAUS_DATA_PATH) / "comparison_algos"
+OUTPUT_COMPARISON_ALGOS_PATH = Path(OUTPUT_COMPARISON_ALGOS_PATH) 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper – Jensen–Shannon divergence
@@ -182,6 +183,8 @@ plt.xticks(ticks=[i+1/2 for i in range(len(print_labels))], labels=print_labels,
 plt.yticks(ticks=[i+1/2 for i in range(len(print_labels))], labels=print_labels, rotation=0)
 plt.title("Pairwise JS divergence (↓ better)")
 plt.tight_layout()
+plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / "js_divergence_heatmap.png", dpi=300)
+plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / "js_divergence_heatmap.pdf")
 plt.show()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -195,8 +198,9 @@ colors = ["green", "white", "white"]
 edges  = ["black" if c == "white" else "green" for c in colors]
 bars = plt.bar(wrist_keys, divergences, color=colors, edgecolor=edges, linewidth=1.5)
 plt.ylabel("JS divergence to finger reference  (↓ better)")
-plt.title("Finger-like similarity of wrist distributions")
+plt.title("Performance of wrist PW detection (↓ better)") # Finger-like similarity of wrist distributions")
 
+plt.xticks(ticks=range(len(wrist_keys)), labels=["Wrist \n" + k.split("_")[0] for k in wrist_keys])
 # add numerical labels on top
 for bar, val in zip(bars, divergences):
     plt.text(bar.get_x() + bar.get_width()/2, val + 0.002,
@@ -204,6 +208,8 @@ for bar, val in zip(bars, divergences):
 
 plt.ylim(0, max(divergences)*1.15)
 plt.tight_layout()
+plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / "wrist_vs_finger_reference.png", dpi=300)
+plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / "wrist_vs_finger_reference.pdf")
 plt.show()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -257,8 +263,10 @@ for key, label in targets:
 
 ax.set_xlabel("PW duration [ms]")
 ax.set_ylabel("Density")
-ax.set_title("Distributions of the durations of waves detected by the different algorithms")
+ax.set_title("Distributions of the wave durations detected")
 ax.legend(frameon=False)
 ax.set_xlim(400, 1400)          # zoom into the informative region
 plt.tight_layout()
+plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / "overlay_closest_distributions.png", dpi=300)
+plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / "overlay_closest_distributions.pdf")
 plt.show()

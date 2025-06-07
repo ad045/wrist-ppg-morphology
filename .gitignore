@@ -200,6 +200,8 @@ data/
 *.csv 
 *.json 
 
+# Output directories
+output/
 
 # Python byte-code 
 *__pycache__*
