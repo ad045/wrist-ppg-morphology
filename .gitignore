@@ -207,3 +207,8 @@ output/
 *__pycache__*
 *.py[cod]
 *$py.class
+
+# Drafts 
+X_*
+
+.DS_Store
