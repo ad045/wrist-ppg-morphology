@@ -5,3 +5,9 @@ Clean version of PPG project - including code from start to finish.
 # How to: 
 - Get pyPPG, and download it into the folder that it is supposed to go into (-> somewhere in preprocesing)
 - Go into 02_clean_ppg, and run "python -m preprocessing.preprocessing" (run modules)
+
+
+
+# Notes: 
+- Six subjects did not have > 15 seconds recording >> were removed (see /Users/adrian/Documents/01_projects/02_clean_ppg/data/preprocessed/skipped_subjects.csv)
+- Sampling frequency seems to have been 500 Hz... 
