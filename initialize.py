@@ -18,3 +18,17 @@ os.makedirs(RAW_AURORA_DATA_PATH, exist_ok=True)
 os.makedirs(PREPROCESSED_AURORA_DATA_PATH, exist_ok=True)
 os.makedirs(RAW_MAUS_DATA_PATH, exist_ok=True)
 os.makedirs(PREPROCESSED_MAUS_DATA_PATH, exist_ok=True) 
+
+
+# Output paths for comparison algorithms
+PREPROCESSED_MAUS_COMPARISON_ALGOS_PATH = f"{PREPROCESSED_MAUS_DATA_PATH}/comparison_algos"
+os.makedirs(PREPROCESSED_MAUS_COMPARISON_ALGOS_PATH, exist_ok=True)
+
+
+# Output path 
+OUTPUT_PATH = "/Users/adrian/Documents/01_projects/02_clean_ppg/output"
+os.makedirs(OUTPUT_PATH, exist_ok=True)
+
+# Output path for comparison of algorithms 
+OUTPUT_COMPARISON_ALGOS_PATH = f"{OUTPUT_PATH}/comparison_algos"
+os.makedirs(OUTPUT_COMPARISON_ALGOS_PATH, exist_ok=True)
