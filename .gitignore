@@ -211,5 +211,6 @@ reports/
 
 # Drafts 
 X_*
+out_*
 
 .DS_Store
