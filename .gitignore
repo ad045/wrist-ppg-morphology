@@ -202,6 +202,7 @@ data/
 
 # Output directories
 output/
+reports/
 
 # Python byte-code 
 *__pycache__*
