@@ -1,3 +1,4 @@
+# This script is to compare the durations of waves. The durations that are extracted here are the ones that were detected with our custom pipeline. 
 # Get durations_custom_finger.npy and durations_custom_wrist.npy
 
 import torch 

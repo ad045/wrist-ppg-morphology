@@ -175,7 +175,10 @@ def process_with_pyPPG_for_subject(subj_data, pid):
         print(f"Skipping subject {pid} due to insufficient signal length.")
         # log into a CSV file 
         with open(PREPROCESSED_AURORA_DATA_PATH + "/skipped_subjects.csv", "a") as f:
-            f.write(f"{pid}, {len(s.filt_sig)}\n")
+            # If the file does not exist, create it and write the header
+            if f.tell() == 0:  # Check if file is empty
+                f.write("pid, length_of_filtered_signal, reason\n")
+            f.write(f"{pid}, {len(s.filt_sig)}, 'length of filtered signal was too short'\n")
         return None
 
     ppg_class = PPG(s)
@@ -463,12 +466,16 @@ def process_all_subjects(data_dict):
     For each subject in the dictionary, process the raw optical signal
     with pyPPG to compute initial derivatives.
     """
+    subjects_to_skip = []
     for pid, subj_data in data_dict.items():
         if "raw_optical" not in subj_data or "sampling_rate" not in subj_data:
             continue
         out = process_with_pyPPG_for_subject(subj_data, pid)
         # If processing fails (e.g. due to short signal), skip this subject
         if out is None:
+            # save subject such that the entry in the data_dict can later be removed
+            subjects_to_skip.append(pid)
+            print(f"Skipping subject {pid} due to insufficient signal length.")
             continue
 
         subj_data["ppg"] = out["ppg"]
@@ -476,6 +483,11 @@ def process_all_subjects(data_dict):
         subj_data["apg"] = out["apg"]
         subj_data["jpg"] = out["jpg"]
         subj_data["fiducials_pyPPG"] = out["fiducials"]
+
+    # Remove subjects that were skipped due to insufficient signal length
+    for pid in subjects_to_skip:
+        del data_dict[pid]
+
     return data_dict
 
 def detect_onsets_ppg_v2(ppg_signal, fs, expected_period_sec=1.0, min_prominence=0.02):
