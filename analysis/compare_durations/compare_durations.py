@@ -216,54 +216,55 @@ plt.show()
 # 4)  Overlay plot of the three closest distributions
 #     (finger-PyPPG, finger-NeuroKit, wrist-Custom)
 # ─────────────────────────────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(6.5, 4))
-
 # CHANGE THIS TO TRUE IF YOU WANT TO SEE THE NUMBER OF SAMPLES IN THE LEGEND
-with_number_samples = False
+# with_number_samples = False
+for with_number_samples in [False, True]:
 
-if with_number_samples: 
-    targets = [("pyppg_finger",   f"Finger: PyPPG (N={len(samples['pyppg_finger'])})"),
-        ("neurokit_finger",f"Finger: NeuroKit2 (N={len(samples['neurokit_finger'])})"),
-        ("custom_finger",  f"Finger: Custom (N={len(samples['custom_finger'])})"),
-        ("pyppg_wrist",    f"Wrist: PyPPG (N={len(samples['pyppg_wrist'])})"),
-        ("neurokit_wrist", f"Wrist: NeuroKit2 (N={len(samples['neurokit_wrist'])})"), 
-        ("custom_wrist",   f"Wrist: Custom (N={len(samples['custom_wrist'])})")]
+    fig, ax = plt.subplots(figsize=(6.5, 4))
 
-else: 
-    targets = [("pyppg_finger",   "Finger: PyPPG"),
-        ("neurokit_finger","Finger: NeuroKit2"),
-        ("custom_finger",  "Finger: Custom"), 
-        ("pyppg_wrist",    "Wrist: PyPPG"),
-        ("neurokit_wrist", "Wrist: NeuroKit2"), 
-        ("custom_wrist",   "Wrist: Custom"), ]
+    if with_number_samples: 
+        targets = [("pyppg_finger",   f"Finger: PyPPG (N={len(samples['pyppg_finger'])})"),
+            ("neurokit_finger",f"Finger: NeuroKit2 (N={len(samples['neurokit_finger'])})"),
+            ("custom_finger",  f"Finger: Custom (N={len(samples['custom_finger'])})"),
+            ("pyppg_wrist",    f"Wrist: PyPPG (N={len(samples['pyppg_wrist'])})"),
+            ("neurokit_wrist", f"Wrist: NeuroKit2 (N={len(samples['neurokit_wrist'])})"), 
+            ("custom_wrist",   f"Wrist: Custom (N={len(samples['custom_wrist'])})")]
 
-x_grid = np.linspace(200, 1800, 800)
+    else: 
+        targets = [("pyppg_finger",   "Finger: PyPPG"),
+            ("neurokit_finger","Finger: NeuroKit2"),
+            ("custom_finger",  "Finger: Custom"), 
+            ("pyppg_wrist",    "Wrist: PyPPG"),
+            ("neurokit_wrist", "Wrist: NeuroKit2"), 
+            ("custom_wrist",   "Wrist: Custom"), ]
 
-for key, label in targets:
-    kde = gaussian_kde(samples[key])
-    y   = kde(x_grid)
-    if "Wrist: Custom" in label:
-        ax.fill_between(x_grid, y, alpha=.35, color="green")
-        ax.plot(x_grid, y, color="green", linewidth=1, label=label)
-    elif "Finger: Custom" in label:
-        # MAYBE CHANGE! 
-        continue
-    elif "Wrist" in label:
-        ax.plot(x_grid, y, color="gray", linewidth=1, label=label) # linestyle="dotted", 
-    else:
-        ax.plot(x_grid, y, color="black", linewidth=1, label=label) # linestyle="--", 
+    x_grid = np.linspace(200, 1800, 800)
 
-ax.set_xlabel("PW duration [ms]")
-ax.set_ylabel("Density")
-ax.set_title("Durations of the detected waves")
-ax.legend(frameon=False)
-ax.set_xlim(400, 1400)          # zoom into the informative region
-plt.tight_layout()
+    for key, label in targets:
+        kde = gaussian_kde(samples[key])
+        y   = kde(x_grid)
+        if "Wrist: Custom" in label:
+            ax.fill_between(x_grid, y, alpha=.35, color="green")
+            ax.plot(x_grid, y, color="green", linewidth=1, label=label)
+        elif "Finger: Custom" in label:
+            # MAYBE CHANGE! 
+            continue
+        elif "Wrist" in label:
+            ax.plot(x_grid, y, color="gray", linewidth=1, label=label) # linestyle="dotted", 
+        else:
+            ax.plot(x_grid, y, color="black", linewidth=1, label=label) # linestyle="--", 
 
-# Save the figure
-file_name = "overlay_closest_distributions"
-if with_number_samples:
-    file_name += "_with_number_samples"
-plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / (file_name + ".png"), dpi=300)
-plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / (file_name + ".pdf"))
-plt.show()
+    ax.set_xlabel("PW duration [ms]")
+    ax.set_ylabel("Density")
+    ax.set_title("Durations of the detected waves")
+    ax.legend(frameon=False)
+    ax.set_xlim(400, 1400)          # zoom into the informative region
+    plt.tight_layout()
+
+    # Save the figure
+    file_name = "overlay_closest_distributions"
+    if with_number_samples:
+        file_name += "_with_number_samples"
+    plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / (file_name + ".png"), dpi=300)
+    plt.savefig(OUTPUT_COMPARISON_ALGOS_PATH / (file_name + ".pdf"))
+    plt.show()
