@@ -318,8 +318,8 @@ def build_parser():
     p = argparse.ArgumentParser("Wave-class labelling & analysis")
     p.add_argument("--dict_path", type=Path, default=DEFAULT_DICT_PATH,
                    help="path to data_dict .pt (default: %(default)s)")
-    p.add_argument("--classify", action="store_true", help="add class labels only")
-    p.add_argument("--analyse", action="store_true", help="run statistics/plots")
+    p.add_argument("--classify", default=True, action="store_true", help="add class labels only")
+    p.add_argument("--analyse", default=True, action="store_true", help="run statistics/plots")
     p.add_argument("--subset", type=float, default=1.0,
                    help="use random subset of subjects (0<subset≤1)")
     p.add_argument("--verbose", action="store_true")
