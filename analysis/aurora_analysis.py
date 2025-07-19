@@ -60,12 +60,15 @@ TAB_DIR.mkdir(parents=True, exist_ok=True)
 
 PREDICTORS_CONT = [
     "age", "baseline_sbp", "baseline_dbp", "height_m",
-    "weight_kg", "average_hr", "bmi",
+    # "weight_kg", 
+    "average_hr", "bmi",
 ]
 PREDICTORS_CAT  = [
     "gender", "cvd_meds", "fitzpatrick_scale",
     "pressure_quality", "optical_quality", "oscillo_or_auscul",
 ]
+
+
 TARGETS = ["rise_time_ms", "rise_time_norm"]
 
 # Configuration parameters for area under curve (AUC) calculation
@@ -78,15 +81,25 @@ def _smooth(y: np.ndarray, window: int = 11, poly: int = 3) -> np.ndarray:
     return y if len(y) < window else signal.savgol_filter(y, window, poly)
 
 
-def _auc_apg(wave: np.ndarray,
+# def _auc_apg(wave: np.ndarray,
+#              start: int = AUC_START,
+#              end:   int = AUC_END) -> float:
+#     """Unsigned APG area between *start* and *end* samples (NaN if too short)."""
+#     if wave.size <= end:
+#         return np.nan
+#     apg = np.gradient(np.gradient(wave))       # APG = 2nd derivative
+#     return float(np.trapezoid(np.abs(apg[start:end+1])))
+
+def _auc_apg(apg_wave: np.ndarray,
              start: int = AUC_START,
              end:   int = AUC_END) -> float:
     """Unsigned APG area between *start* and *end* samples (NaN if too short)."""
-    if wave.size <= end:
-        return np.nan
-    apg = np.gradient(np.gradient(wave))       # APG = 2nd derivative
-    return float(np.trapezoid(np.abs(apg[start:end+1])))
-
+    # if apg_wave.size <= end:
+    
+    # only get the APG area between start and end, that is > 0 
+    mask = apg_wave > 0
+    wave = apg_wave*mask
+    return float(np.trapezoid(wave[start:end+1]))
 
 def _inflection_before_after(y: np.ndarray, peak_idx: int, threshold=1e-3) -> Tuple[bool, bool]:
     """Detect whether *a* zero-crossing of the 2nd derivative exists **before**
@@ -133,7 +146,9 @@ def classify_wave(wave: np.ndarray, threshold) -> int:
 def label_entry(entry: Dict[str, Any], threshold) -> None:
     if "ensemble_class" in entry:
         return
-    waves  = entry.get("individual_waves", [])
+    waves  = entry.get("individual_wave_derivs_ppg_arr", [])
+    apg_waves = entry.get("individual_wave_derivs_apg_arr", [])
+
     classes = np.array([classify_wave(w, threshold) for w in waves], dtype=np.int8)
     # entry["individual_waves_classes"] = classes
     # entry["ensemble_class"] = int(classify_wave(entry.get("ensemble_wave", np.empty(0)), threshold=threshold))
@@ -142,17 +157,97 @@ def label_entry(entry: Dict[str, Any], threshold) -> None:
                                                 threshold=threshold))
 
     # ───────────────── APG area (unsigned & signed) ──────────────────
-    waves = entry.get("individual_waves", [])
-    auc_waves         = np.array([_auc_apg(w) for w in waves])
+    # waves = entry.get("individual_waves", [])
+    auc_waves = np.array([_auc_apg(w) for w in apg_waves])
     sign_wave_factor  = np.where(np.isin(classes, [1, 2]), -1, 1)
     entry["area_under_the_curve_unsign_wave"] = auc_waves
     entry["area_under_the_curve_sign_wave"]     = auc_waves * sign_wave_factor
 
-    ens_auc = _auc_apg(entry.get("ensemble_wave", np.empty(0)))
+    ens_auc = _auc_apg(entry.get("ensemble_apg_avg", np.empty(0)))
     ens_sign = -1 if entry["ensemble_class"] in (1, 2) else 1
     entry["area_under_the_curve_unsign"] = ens_auc
-    entry["area_under_the_curve_sign"]     = ens_sign * ens_auc
-    
+    entry["area_under_the_curve_sign"]    = ens_sign * ens_auc
+
+
+# # ──────────────────────── quick visual AUC check ──────────────────────────
+# def plot_waves_with_auc(
+#     data_dict: Dict[str, Dict[str, Any]],
+#     n_examples: int = 6,
+#     use_ensemble_wave: bool = False,
+#     figsize: Tuple[int, int] = (12, 8),
+# ) -> None:
+#     """
+#     Pick *n_examples* subjects at random, plot their wave, shade the
+#     AUC window, and write the computed area under the curve (|APG|)
+#     into the title.
+
+#     Parameters
+#     ----------
+#     data_dict : dict
+#         Your usual subject‐id → entry dictionary (already labelled).
+#     n_examples : int, default 6
+#         How many waves you want to look at.
+#     use_ensemble_wave : bool, default False
+#         If True, plot ensemble waves; otherwise plot a random
+#         individual wave of each subject.
+#     figsize : tuple, default (12, 8)
+#         Size passed to ``plt.subplots``.
+#     """
+#     # -------- pick subjects ------------------------------------------------
+#     if n_examples > len(data_dict):
+#         n_examples = len(data_dict)
+#     chosen_ids = np.random.choice(list(data_dict.keys()), n_examples, replace=False)
+
+#     n_rows = int(np.ceil(n_examples / 3))
+#     fig, axes = plt.subplots(n_rows, 3, figsize=figsize, sharex=True)
+#     axes = axes.ravel()
+
+#     for ax, pid in zip(axes, chosen_ids):
+#         entry = data_dict[pid]
+
+#         # ----- get a wave ---------------------------------------------------
+#         if use_ensemble_wave:
+#             wave = entry.get("ensemble_wave", np.empty(0))
+#         else:
+#             waves = entry.get("individual_waves", [])
+#             wave = waves[np.random.randint(len(waves))] if len(waves) else np.empty(0)
+
+#         if wave.size == 0:
+#             ax.text(0.5, 0.5, "no wave", ha="center", va="center")
+#             ax.axis("off")
+#             continue
+
+#         # ----- compute and plot --------------------------------------------
+#         # Unsigned AUC:
+#         auc_val = _auc_apg(wave)   # unsigned ∫|APG|
+
+
+#         # Choose between signed and unsigned AUC:
+#         SIGNED = False
+#         if SIGNED: 
+#             sign = -1 if entry["ensemble_class"] in (1, 2) else 1
+#             auc_val = sign * auc_val
+
+
+#         x = np.arange(len(wave))
+#         ax.plot(x, wave, lw=1)
+
+#         # highlight AUC window
+#         ax.axvspan(AUC_START, AUC_END, color="grey", alpha=0.2)
+
+#         # pretty axis / annotation
+#         ax.set_title(f"PID {pid}  |AUC| = {auc_val:.1f}")
+#         ax.set_xlabel("sample")
+#         ax.set_ylabel("PPG amplitude")
+
+#     # hide any empty subplots
+#     for ax in axes[n_examples:]:
+#         ax.axis("off")
+
+#     fig.suptitle("Visual check of AUC calculation (shaded = integration window)")
+#     fig.tight_layout()
+#     plt.show()
+
 
 # ────────────────────────── dataframe & plotting helpers ───────────────────
 
@@ -319,6 +414,8 @@ def build_parser():
     p.add_argument("--dict_path", type=Path, default=DEFAULT_DICT_PATH,
                    help="path to data_dict .pt (default: %(default)s)")
     p.add_argument("--classify", default=True, action="store_true", help="add class labels only")
+    p.add_argument("--plot_auc", default=True, action="store_true", # set default=False, later. 
+               help="plot a few waves with their AUC value")
     p.add_argument("--analyse", default=True, action="store_true", help="run statistics/plots")
     p.add_argument("--subset", type=float, default=1.0,
                    help="use random subset of subjects (0<subset≤1)")
@@ -362,6 +459,10 @@ def main(argv: List[str] | None = None):
             logging.info("Classes written to %s", out_pt)
         elif args.classify and not args.analyse:
             logging.info("Classes already present – nothing to do.")
+
+        # if args.plot_auc:
+        #     plot_waves_with_auc(data_dict, n_examples=6)
+
 
 
     # ── analysis ───────────────────────────────────────────────
