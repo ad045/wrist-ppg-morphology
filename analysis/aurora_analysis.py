@@ -60,13 +60,33 @@ TAB_DIR.mkdir(parents=True, exist_ok=True)
 
 PREDICTORS_CONT = [
     "age", "baseline_sbp", "baseline_dbp", "height_m",
-    # "weight_kg", 
+    "weight_kg", 
     "average_hr", "bmi",
 ]
 PREDICTORS_CAT  = [
     "gender", "cvd_meds", "fitzpatrick_scale",
     "pressure_quality", "optical_quality", "oscillo_or_auscul",
 ]
+
+# ───────────────── predictor-set presets ────────────────────────────
+
+PREDICTOR_SETS: dict[str, dict[str, list[str]]] = {
+    "all": { # all variables, including categorical
+        "cont": PREDICTORS_CONT,
+        "cat":  PREDICTORS_CAT,
+    },
+    "core": { # the six core variables, no categorical
+        "cont": ["age", "bmi", "height_m",
+                 "average_hr", "baseline_sbp", "baseline_dbp"],
+        "cat":  [],           # no categorical variables
+    },
+        "core_plus_fitzpatrick": { # all variables, including categorical
+        "cont": ["age", "bmi", "height_m",
+                 "average_hr", "baseline_sbp", "baseline_dbp", "fitzpatrick_scale"],
+        "cat":  [],
+    },
+    # add more here 
+}
 
 
 TARGETS = ["rise_time_ms", "rise_time_norm"]
@@ -281,7 +301,10 @@ def _scatter(ax, x, y, xl):
     ax.set_ylabel("rise-time [ms]")
 
 
-def univariate_plots(df: pd.DataFrame, variable_to_predict: str = "rise_time_ms"):
+def univariate_plots(
+        df: pd.DataFrame, 
+        variable_to_predict: str = "rise_time_ms",
+        tag: str | None = None):
     """Create univariate scatter plots for each continuous predictor."""
     cols = PREDICTORS_CONT
     rows = int(np.ceil(len(cols)/3))
@@ -296,12 +319,14 @@ def univariate_plots(df: pd.DataFrame, variable_to_predict: str = "rise_time_ms"
 
     fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(FIG_DIR / f"univariate_corr_{variable_to_predict}.{ext}")
+        fig.savefig(FIG_DIR / f"univariate_corr{f'_{tag}' if tag else ''}.{ext}")
     plt.close(fig)
 
 # ---------- corr heat-map ----------
 
-def correlation_heatmap(df):
+def correlation_heatmap(
+        df: pd.DataFrame, 
+        tag: str | None = None):
     corr = df[PREDICTORS_CONT + ["rise_time_ms", "rise_time_norm", "area_under_the_curve_unsign", "area_under_the_curve_sign"]].corr()
     mask = np.triu(np.ones_like(corr, bool), k=1) # remove k=1 to remove the diagnoal values 
     fig, ax = plt.subplots(figsize=(8,8))
@@ -314,29 +339,55 @@ def correlation_heatmap(df):
 
     fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(FIG_DIR / f"corr_heatmap.{ext}")
+        fig.savefig(FIG_DIR / f"corr_heatmap{f'_{tag}' if tag else ''}.{ext}")
     plt.close(fig)
 
 # ---------- histogram ----------
 
-def rise_time_hist(df):
+def rise_time_hist(
+        df: pd.DataFrame,
+        tag: str | None = None):
     fig, ax = plt.subplots(figsize=(5,4))
     sns.histplot(df["rise_time_ms"].dropna(), bins=30, ax=ax)
     ax.set_xlabel("rise-time [ms]")
     fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(FIG_DIR / f"rise_time_hist.{ext}")
+        fig.savefig(FIG_DIR / f"rise_time_hist{f'_{tag}' if tag else ''}.{ext}")
     plt.close(fig)
 
 # ---------- linear regression (sklearn + statsmodels) ----------
-
-def multivariate_regression(df: pd.DataFrame, variable_to_predict: str = "rise_time_ms"):
+def multivariate_regression(
+    df: pd.DataFrame,
+    cont_vars: list[str],
+    cat_vars:  list[str],
+    variable_to_predict: str = "rise_time_ms",
+    tag: str | None = None,          # appended to filenames
+) -> None:
     # --- design matrix ----------------------------------------------------
-    X_num = df[PREDICTORS_CONT].values
-    ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
-    X_cat = ohe.fit_transform(df[PREDICTORS_CAT])
-    X = np.hstack([X_num, X_cat])
-    feature_names = PREDICTORS_CONT + ohe.get_feature_names_out(PREDICTORS_CAT).tolist()
+    X_num = df[cont_vars].values
+    if cat_vars:
+        ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+        X_cat = ohe.fit_transform(df[cat_vars])
+        X = np.hstack([X_num, X_cat])
+        feature_names = cont_vars + ohe.get_feature_names_out(cat_vars).tolist()
+    else:
+        X = X_num
+        feature_names = cont_vars
+
+
+# def multivariate_regression(df: pd.DataFrame, variable_to_predict: str = "rise_time_ms"):
+#     # --- design matrix ----------------------------------------------------
+#     X_num = df[PREDICTORS_CONT].values
+#     ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
+#     X_cat = ohe.fit_transform(df[PREDICTORS_CAT])
+#     X = np.hstack([X_num, X_cat])
+#     feature_names = PREDICTORS_CONT + ohe.get_feature_names_out(PREDICTORS_CAT).tolist()
+
+    # --- remove nans from X and y ----------------------------- (only important due to fitzpatrick_scale)
+    mask = ~np.isnan(X).any(axis=1) & ~np.isnan(df[variable_to_predict])
+    X = X[mask]
+    df = df[mask]
+    print(f"There were {np.any(mask)} rows with NaNs in X or y, which were removed.")
 
     # --- scale ------------------------------------------------------------
     scaler = StandardScaler()
@@ -351,7 +402,11 @@ def multivariate_regression(df: pd.DataFrame, variable_to_predict: str = "rise_t
     coef_df["abs"] = coef_df["coef"].abs()
     coef_df.sort_values("abs", ascending=False, inplace=True)
     coef_df.drop("abs", axis=1, inplace=True)
-    coef_df.to_csv(TAB_DIR / f"coefficients_for_{variable_to_predict}.csv", index=False)
+
+    # for saving (everywhere in this function):all file outputs now include the optional tag
+    suffix = f"_{tag}" if tag else ""
+    coef_df.to_csv(TAB_DIR / f"coefficients_for_{variable_to_predict}{suffix}.csv", index=False)
+
     with open(TAB_DIR / f"coefficients_for_{variable_to_predict}.tex", "w") as f:
         f.write(coef_df.to_latex(index=False, float_format="%.3f"))
 
@@ -368,7 +423,8 @@ def multivariate_regression(df: pd.DataFrame, variable_to_predict: str = "rise_t
     ax.set_title(f"Linear model  R²={r2:.3f}")
     fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(FIG_DIR / f"actual_vs_pred_{variable_to_predict}.{ext}")
+        # fig.savefig(FIG_DIR / f"actual_vs_pred_{variable_to_predict}.{ext}")
+        fig.savefig(FIG_DIR / f"actual_vs_pred_{variable_to_predict}{suffix}.{ext}")
     plt.close(fig)
 
     # statsmodels OLS (for pretty summary) ---------------------------------
@@ -377,8 +433,10 @@ def multivariate_regression(df: pd.DataFrame, variable_to_predict: str = "rise_t
     sm_mod = sm.OLS(y, X_sm).fit()
     summary_txt = sm_mod.summary().as_text()
     summary_tex = sm_mod.summary().as_latex()
-    (TAB_DIR / f"ols_summary_{variable_to_predict}.txt").write_text(summary_txt)
-    (TAB_DIR / f"ols_summary_{variable_to_predict}.tex").write_text(summary_tex)
+
+
+    (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.txt").write_text(summary_txt)
+    (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.tex").write_text(summary_tex)
 
     logging.info("Multivariate regression finished(R² = %.3f) for variable '%s'", r2, variable_to_predict)
 
@@ -412,16 +470,19 @@ def _get_variable_name_alias(variable_to_predict):
 def build_parser():
     p = argparse.ArgumentParser("Wave-class labelling & analysis")
     p.add_argument("--dict_path", type=Path, default=DEFAULT_DICT_PATH,
-                   help="path to data_dict .pt (default: %(default)s)")
+                    help="path to data_dict .pt (default: %(default)s)")
     p.add_argument("--classify", default=True, action="store_true", help="add class labels only")
     p.add_argument("--plot_auc", default=True, action="store_true", # set default=False, later. 
-               help="plot a few waves with their AUC value")
+                    help="plot a few waves with their AUC value")
     p.add_argument("--analyse", default=True, action="store_true", help="run statistics/plots")
     p.add_argument("--subset", type=float, default=1.0,
-                   help="use random subset of subjects (0<subset≤1)")
+                     help="use random subset of subjects (0<subset≤1)")
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--inflect_thr", type=float, default=1e-2, # 3,
-               help="2nd-derivative threshold for inflection detection")
+                     help="2nd-derivative threshold for inflection detection")
+    p.add_argument("--reg_set", choices=PREDICTOR_SETS.keys(), nargs="+", default=["core", "all", "core_plus_fitzpatrick"],
+                     help="Which predefined predictor set(s) to use. May be given multiple times to run multiple versions, e.g.  --reg_set all core")
+
 
     return p
 
@@ -472,17 +533,33 @@ def main(argv: List[str] | None = None):
         df = _make_dataframe(data_dict)
         logging.info("DataFrame created with %d rows", len(df))
 
-        univariate_plots(df, variable_to_predict="rise_time_ms")
-        univariate_plots(df, variable_to_predict="area_under_the_curve_unsign")
-        univariate_plots(df, variable_to_predict="area_under_the_curve_sign")
+        univariate_plots(df, variable_to_predict="rise_time_ms", tag=set_name)
+        univariate_plots(df, variable_to_predict="area_under_the_curve_unsign", tag=set_name)
+        univariate_plots(df, variable_to_predict="area_under_the_curve_sign", tag=set_name)
 
-        correlation_heatmap(df)
-        rise_time_hist(df)
+        correlation_heatmap(df, tag=set_name)
+        rise_time_hist(df, tag=set_name)
 
-        multivariate_regression(df, variable_to_predict="rise_time_ms")
-        # multivariate_regression(df, variable_to_predict="rise_time_norm")
-        multivariate_regression(df, variable_to_predict="area_under_the_curve_unsign")
-        multivariate_regression(df, variable_to_predict="area_under_the_curve_sign")
+        # multivariate_regression(df, variable_to_predict="rise_time_ms")
+        # # multivariate_regression(df, variable_to_predict="rise_time_norm")
+        # multivariate_regression(df, variable_to_predict="area_under_the_curve_unsign")
+        # multivariate_regression(df, variable_to_predict="area_under_the_curve_sign")
+
+        for set_name in args.reg_set:
+            pred_cont = PREDICTOR_SETS[set_name]["cont"]
+            pred_cat  = PREDICTOR_SETS[set_name]["cat"]
+
+            multivariate_regression(df, pred_cont, pred_cat,
+                                    variable_to_predict="rise_time_ms",
+                                    tag=set_name)
+
+            # multivariate_regression(df, pred_cont, pred_cat,
+            #                         variable_to_predict="area_under_the_curve_unsign",
+            #                         tag=set_name)
+
+            multivariate_regression(df, pred_cont, pred_cat,
+                                    variable_to_predict="area_under_the_curve_sign",
+                                    tag=set_name)
 
         logging.info("Figures → %s | Tables → %s", FIG_DIR, TAB_DIR)
 
