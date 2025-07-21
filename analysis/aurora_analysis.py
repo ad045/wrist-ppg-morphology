@@ -5,37 +5,27 @@ AURORA | MAUS – wave-class labelling & regression analysis
 
 **What this script does**
 -------------------------
-1. **Classify every pulse wave** according to the five-class decision tree in the
-   thesis (adds *individual_waves_classes* & *ensemble_class* to the dict).
+1. **Classify every pulse wave** according to the five-class decision tree (adds *individual_waves_classes* & *ensemble_class* to the dict).
 2. **Run statistics & create figures**
    * univariate scatter/OLS line plots
    * correlation heat-map
    * rise-time histogram
    * multivariate *and* statsmodels OLS regression (z-normalised inputs)
-3. **Write outputs**
-   * figures → `out/figures/*.png` & `*.pdf`
-   * coefficient CSV (`out/tables/coefficients.csv`)
-   * pretty LaTeX table of coefficients (`out/tables/coefficients.tex`)
-   * full statsmodels summary as LaTeX (`out/tables/ols_summary.tex`) *and* text
+3. **Save outputs**
+   * figures → `output/regression/figures/*.png` & `*.pdf`
+   * coefficient CSV (`output/regression/tables/coefficients.csv`)
+   * pretty LaTeX table of coefficients (`output/regression/tables/coefficients.tex`)
+   * full statsmodels summary as LaTeX (`output/regression/tables/ols_summary.tex`) *and* as txt file (`output/regression/tables/ols_summary.txt`)
    * updated data_dict with classes → `*_with_classes.pt`
-
-Quick start
------------
-```bash
-python aurora_analysis.py                 # full pipeline (detect dict automatically)
-python aurora_analysis.py --classify      # only label waves
-python aurora_analysis.py --analyse       # only figures/stats (dict already has classes)
-```
-
-Dependencies: numpy, scipy, pandas, matplotlib, seaborn, scikit-learn,
-statsmodels, torch.
 """
+
 from __future__ import annotations
 
 import argparse
 import logging
 import sys
 from pathlib import Path
+import os
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
@@ -49,12 +39,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import statsmodels.api as sm
 
+from initialize import REPROCESSED_AURORA_DATA_PATH, OUTPUT_REGRESSION_PATH
+
 # ───────────────────────────── configuration ──────────────────────────────
 # DEFAULT_DICT_PATH = Path(__file__).resolve().with_name("data_dict_osc_auc_with_derivatives.pt")
-DEFAULT_DICT_PATH = "/Users/adrian/Documents/01_projects/02_clean_ppg/data/AURORA/preprocessed/data_dict_osc_auc_with_derivatives.pt"
-OUT_DIR   = Path(__file__).resolve().with_name("out")
-FIG_DIR   = OUT_DIR / "figures"
-TAB_DIR   = OUT_DIR / "tables"
+DEFAULT_DICT_PATH = Path(REPROCESSED_AURORA_DATA_PATH / "data_dict_osc_auc_with_derivatives.pt")
+# OUT_DIR   = Path(__file__).resolve().with_name("out")
+
+FIG_DIR   = Path(OUTPUT_REGRESSION_PATH / "figures")
+TAB_DIR   = Path(OUTPUT_REGRESSION_PATH / "tables")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 TAB_DIR.mkdir(parents=True, exist_ok=True)
 

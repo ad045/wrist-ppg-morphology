@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env ppg_project
 """
 AURORA **pre‑processing & post‑processing** pipeline
 ===================================================
