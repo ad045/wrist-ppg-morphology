@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import pathlib
 from pathlib import Path
 import os
 from typing import Any, Dict, List, Tuple
@@ -39,15 +40,25 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import statsmodels.api as sm
 
-from initialize import REPROCESSED_AURORA_DATA_PATH, OUTPUT_REGRESSION_PATH
+
+
+# make project root importable no matter how we launch the script
+root = pathlib.Path(__file__).resolve().parents[1]
+sys.path.append(str(root))
+
+from initialize import (
+    PREPROCESSED_AURORA_DATA_PATH,
+    OUTPUT_REGRESSION_PATH,
+)
+# from ..initialize import PREPROCESSED_AURORA_DATA_PATH, OUTPUT_REGRESSION_PATH -> or: get used to running it from the project root
 
 # ───────────────────────────── configuration ──────────────────────────────
 # DEFAULT_DICT_PATH = Path(__file__).resolve().with_name("data_dict_osc_auc_with_derivatives.pt")
-DEFAULT_DICT_PATH = Path(REPROCESSED_AURORA_DATA_PATH / "data_dict_osc_auc_with_derivatives.pt")
+DEFAULT_DICT_PATH = Path(PREPROCESSED_AURORA_DATA_PATH) / "data_dict_osc_auc_with_derivatives.pt"
 # OUT_DIR   = Path(__file__).resolve().with_name("out")
 
-FIG_DIR   = Path(OUTPUT_REGRESSION_PATH / "figures")
-TAB_DIR   = Path(OUTPUT_REGRESSION_PATH / "tables")
+FIG_DIR   = Path(OUTPUT_REGRESSION_PATH) / "figures"
+TAB_DIR   = Path(OUTPUT_REGRESSION_PATH) / "tables"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 TAB_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -526,19 +537,19 @@ def main(argv: List[str] | None = None):
         df = _make_dataframe(data_dict)
         logging.info("DataFrame created with %d rows", len(df))
 
-        univariate_plots(df, variable_to_predict="rise_time_ms", tag=set_name)
-        univariate_plots(df, variable_to_predict="area_under_the_curve_unsign", tag=set_name)
-        univariate_plots(df, variable_to_predict="area_under_the_curve_sign", tag=set_name)
-
-        correlation_heatmap(df, tag=set_name)
-        rise_time_hist(df, tag=set_name)
-
-        # multivariate_regression(df, variable_to_predict="rise_time_ms")
-        # # multivariate_regression(df, variable_to_predict="rise_time_norm")
-        # multivariate_regression(df, variable_to_predict="area_under_the_curve_unsign")
-        # multivariate_regression(df, variable_to_predict="area_under_the_curve_sign")
-
         for set_name in args.reg_set:
+            univariate_plots(df, variable_to_predict="rise_time_ms", tag=set_name)
+            univariate_plots(df, variable_to_predict="area_under_the_curve_unsign", tag=set_name)
+            univariate_plots(df, variable_to_predict="area_under_the_curve_sign", tag=set_name)
+
+            correlation_heatmap(df, tag=set_name)
+            rise_time_hist(df, tag=set_name)
+
+            # multivariate_regression(df, variable_to_predict="rise_time_ms")
+            # # multivariate_regression(df, variable_to_predict="rise_time_norm")
+            # multivariate_regression(df, variable_to_predict="area_under_the_curve_unsign")
+            # multivariate_regression(df, variable_to_predict="area_under_the_curve_sign")
+
             pred_cont = PREDICTOR_SETS[set_name]["cont"]
             pred_cat  = PREDICTOR_SETS[set_name]["cat"]
 
