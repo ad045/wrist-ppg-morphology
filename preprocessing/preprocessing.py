@@ -48,6 +48,11 @@ import pandas as pd
 import torch
 from scipy.signal import find_peaks
 
+# pyPPG imports
+from pyPPG import PPG, Fiducials
+import pyPPG.preproc as PP
+import pyPPG.fiducials as FP
+
 from initialize import (  # project‑specific path constants
     RAW_AURORA_DATA_PATH,
     PREPROCESSED_AURORA_DATA_PATH,
@@ -55,90 +60,11 @@ from initialize import (  # project‑specific path constants
     PREPROCESSED_MAUS_DATA_PATH,
 )
 
-# # run in "02_clean_ppg" folder
-# # python -m preprocessing.preprocessing # m ist wichtig!! 
-
 # Combined preprocessing script for both oscillometric and auscultatory datasets.
 # It loads metadata, filters participants, reads raw optical waveforms,
 # computes sampling frequency, processes the raw signal with pyPPG to compute derivatives,
 # splits the signal into individual waves, computes an ensemble wave, average HR,
 # and finally computes derivatives for both the ensemble and individual waves.
-# """
-
-
-
-# # Creates this data: 
-# # "...\\aurora_data\\preprocessed\\data_dict_aurora_final_{dataset_type}_2.pt"
-
-
-
-# import os
-# from pathlib import Path
-# import numpy as np
-# import pandas as pd
-# import torch
-# import matplotlib.pyplot as plt
-# import warnings
-# from scipy import signal
-# from scipy.signal import find_peaks
-
-# from initialize import DATA_PATH, AURORA_DATA_PATH, RAW_AURORA_DATA_PATH, PREPROCESSED_AURORA_DATA_PATH
-
-
-# # Suppress FutureWarnings from pandas (e.g. chained assignment warnings)
-# warnings.filterwarnings("ignore", category=FutureWarning)
-
-# # --- pyPPG imports ---
-from pyPPG import PPG, Fiducials
-import pyPPG.preproc as PP
-import pyPPG.fiducials as FP
-
-# # --- Utility Functions ---
-
-# def process_ppg_wave(wave):
-#     """
-#     Remove linear trend (so that first and last samples become 0)
-#     and normalize the detrended wave to [0,1].
-#     """
-#     n = len(wave)
-#     trend = np.linspace(wave[0], wave[-1], n)
-#     detrended = wave - trend
-#     mn = detrended.min()
-#     mx = detrended.max()
-#     if abs(mx - mn) < 1e-9:
-#         return np.zeros_like(detrended)
-#     normalized = (detrended - mn) / (mx - mn)
-#     return normalized
-
-# def compute_derivatives_pyppg(ensemble_wave, fs=1000):
-#     """
-#     Repeat the (processed) ensemble wave 20 times,
-#     run pyPPG.Preprocess to compute derivatives,
-#     and then extract the 11th wave (index 10).
-#     """
-#     repeated = np.tile(ensemble_wave, 20)
-#     from dotmap import DotMap
-#     s = DotMap()
-#     s.start = 0
-#     s.end = len(repeated)
-#     s.v = repeated
-#     s.fs = fs
-#     s.name = "temp_signal"
-#     try:
-#         ppg, vpg, apg, jpg = PP.Preprocess().get_signals(s) # , filtering=True)
-#     except Exception as e:
-#         print("Error in PP.Preprocess:", e)
-#         # Return zeros if processing fails
-#         zeros = np.zeros(len(ensemble_wave))
-#         return zeros, zeros, zeros, zeros
-#     wave_len = len(ensemble_wave)
-#     start_idx = 10 * wave_len
-#     end_idx = 11 * wave_len
-#     ppg_11 = ppg[start_idx:end_idx]
-#     vpg_11 = vpg[start_idx:end_idx]
-#     apg_11 = apg[start_idx:end_idx]
-#     jpg_11 = jpg[start_idx:end_idx]
-#     return ppg_11, vpg_11, apg_11, jpg_11
 
 
 def process_with_pyPPG_for_subject(subj_data, pid):
@@ -155,20 +81,18 @@ def process_with_pyPPG_for_subject(subj_data, pid):
     s.name = str(pid)
     s.filtering = True                # required by the new Preprocess class
 
-    # ── 1.  run the new pre-processing code you pasted ────────────────────────
+    # pyPPG: preprocessing 
     ppg, vpg, apg, jpg = PP.Preprocess().get_signals(s)
 
-    # stash the derivatives on DotMap (rest of the pipeline uses these names)
+    # pyPPG: stash the derivatives on DotMap (rest of the pipeline uses these names)
     s.filt_sig = ppg
     s.filt_d1  = vpg
     s.filt_d2  = apg
     s.filt_d3  = jpg
     dt = 1.0 / s.fs
-    # print("s.filt_sig", s.fs, s.filt_sig.shape)
 
+    # compute the 3rd derivative (spg) manually
     spg = np.gradient(s.filt_d3, dt)
-
-    # ── 2.  make sure the PPG object exposes the attrs FpCollection expects ── 
 
     # Check if the signal is long enough for processing -> if not, continue with next subject and save information in csv file. Otherwise, pyPPG will throw an error.
     if len(s.filt_sig) <= s.fs*15: 
@@ -181,17 +105,18 @@ def process_with_pyPPG_for_subject(subj_data, pid):
             f.write(f"{pid}, {len(s.v)}, {len(s.filt_sig)}, 'length of (filtered) signal was too short'\n")
         return None
 
+    # pyPPG: Class and derivatives
     ppg_class = PPG(s)
     ppg_class.ppg = s.filt_sig        # 0-th derivative
     ppg_class.vpg = s.filt_d1         # 1-st derivative
     ppg_class.apg = s.filt_d2         # 2-nd derivative
     ppg_class.jpg = s.filt_d3         # 3-rd derivative
             
-    # pyPPG’s fiducial extractor needs a “correction” DataFrame on s
+    # pyPPG: fiducial extractor needs a “correction” DataFrame on s
     corr_cols = ['on', 'dn', 'dp', 'v', 'w', 'f']
     s.correction = pd.DataFrame([[True]*len(corr_cols)], columns=corr_cols)
 
-    # ── 3.  extract fiducials ────────────────────────────────────────────────
+    # pyPPG: extract fiducials
     fiducials = FP.FpCollection(ppg_class).get_fiducials(ppg_class)
 
     return {
@@ -268,78 +193,10 @@ def load_data(raw_path, dataset_type="oscillometric"):
     ]
     return no_comorb_df, waveform_base_path
 
-
-# def load_data_maus(raw_path, recording_site="finger"):     # "finger" 256 Hz  or  "wrist" 100 Hz
-#     """
-#     Build a pseudo-metadata DataFrame so that the rest of the pipeline
-#     believes it is dealing with an AURORA-style dataset.
-#     """
-#     rows = []
-
-#     for subj in sorted((raw_path).iterdir()):  
-#         pid = subj.name                     # '001', '002', … as string
-#         # choose modality ---------------------------------------------------
-#         if recording_site == "finger":
-#             glob_pat = "fPPG_*back.csv"
-#             base_folder = subj / "Procomp"
-#             fs = 256
-#         else:                               # "wrist"
-#             glob_pat = "wPPG_*back.csv"
-#             base_folder = subj / "Watch"
-#             fs = 100
-#         for csv_file in base_folder.glob(glob_pat):
-#             rows.append({
-#                 "pid": pid,
-#                 "waveform_file_path": str(csv_file),
-#                 "sampling_rate": fs,
-#                 # everything below is optional → fill with NaNs or labels
-#                 "phase": "task",
-#                 "measurement": csv_file.stem.split("_")[1],   # '0back', '2back', …
-#                 "quality_optical": 1.0,      # placeholder (no quality scores in MAUS)
-#                 "quality_pressure": 1.0,
-#             })
-#     df = pd.DataFrame(rows)
-#     print(f"MAUS loader - {len(df)} segments found ({recording_site} PPG)")
-#     # the pipeline later filters by quality_* > 0.8, so keep those as 1.0
-#     return df, raw_path
-
-
-# def load_data_maus(raw_path: Path, recording_site: str = "finger"):     # "finger" 256 Hz  or  "wrist" 100 Hz
-#     """
-#     Return a dummy DataFrame + the *base* folder so that the rest of the
-#     AURORA pipeline can continue unchanged.
-#     Accepts either layout:
-#         Raw_data/001/Procomp/…   (old assumption)
-#         Raw_data/Procomp/001/…   (original MAUS release)
-#     """
-#     device_folder = "Procomp" if recording_site == "finger" else "Watch"
-#     glob_pat      = "fPPG_*back.csv" if recording_site == "finger" else "wPPG_*back.csv"
-#     fs            = 256 if recording_site == "finger" else 100
-
-#     rows = []
-#     # ── layout 1:      Raw_data/Procomp/001/*.csv
-#     root = raw_path / device_folder
-#     print(f"[INFO] MAUS loader – looking for {recording_site} PPG in {root}")
-#     if root.exists():                                     # MAUS official layout data/MAUS/raw/Raw_data/.../inf
-#         for csv_file in root.glob("*/" + glob_pat):       # */ = subject folder
-#             pid = csv_file.parent.name                    # '001'
-#             rows.append(_row(pid, csv_file, fs))
-#         print("[INFO] MAUS loader – found", len(rows), "files")
-#     else:                                                 # layout 2: Raw_data/001/Procomp/*.csv
-#         for subj in raw_path.glob("*"):                   # 001/, 002/, …
-#             csv_dir = subj / device_folder
-#             for csv_file in csv_dir.glob(glob_pat):
-#                 pid = subj.name
-#                 rows.append(_row(pid, csv_file, fs))
-
-#     df = pd.DataFrame(rows)
-#     print(f"[INFO] MAUS loader – {len(df)} files found ({recording_site})")
-#     return df, raw_path
-
 # -----------------------------------------------------------------------------
 # MAUS *resting* loader
 # -----------------------------------------------------------------------------
-def load_data_maus_rest(
+def load_data_maus_rest( 
         raw_path: Path,
         recording_site: str = "finger",     # "finger" (Procomp) or "wrist" (PixArt)
 ) -> tuple[pd.DataFrame, Path]:
@@ -390,16 +247,6 @@ def load_data_maus_rest(
     df = pd.DataFrame(rows)
     print(f"[INFO] MAUS resting loader – {len(df)} files found ({recording_site})")
     return df, raw_path
-
-
-# def _row(pid, csv_file, fs):
-#     return dict(pid=pid,
-#                 waveform_file_path=str(csv_file),
-#                 sampling_rate=fs,
-#                 phase="task",
-#                 measurement=csv_file.stem.split("_")[1],   # 0back/2back/…
-#                 quality_optical=1.0,
-#                 quality_pressure=1.0)
 
 
 def create_data_dict(no_comorb_df, waveform_base_path):

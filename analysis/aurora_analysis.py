@@ -53,11 +53,6 @@ from initialize import (
     IMAGE_FORMATS,
 )
 
-VA
-
-
-# from ..initialize import PREPROCESSED_AURORA_DATA_PATH, OUTPUT_REGRESSION_PATH -> or: get used to running it from the project root
-
 # ───────────────────────────── configuration ──────────────────────────────
 # DEFAULT_DICT_PATH = Path(__file__).resolve().with_name("data_dict_osc_auc_with_derivatives.pt")
 DEFAULT_DICT_PATH = Path(PREPROCESSED_AURORA_DATA_PATH) / "data_dict_osc_auc_with_derivatives.pt"
@@ -80,16 +75,18 @@ PREDICTORS_CAT  = [
 
 # ───────────────── predictor-set presets ────────────────────────────
 
-PREDICTOR_SETS: dict[str, dict[str, list[str]]] = {
+PREDICTOR_SETS: dict[str, dict[str, list[str]]] = { # Include all variable sets to use in the analysis here 
     "all": { # all variables, including categorical
         "cont": PREDICTORS_CONT,
         "cat":  PREDICTORS_CAT,
     },
+
     "core": { # the six core variables, no categorical
         "cont": ["age", "bmi", "height_m",
                  "average_hr", "baseline_sbp", "baseline_dbp"],
         "cat":  [],           # no categorical variables
     },
+
         "core_plus_fitzpatrick": { # all variables, including categorical
         "cont": ["age", "bmi", "height_m",
                  "average_hr", "baseline_sbp", "baseline_dbp", "fitzpatrick_scale"],
@@ -111,15 +108,6 @@ def _smooth(y: np.ndarray, window: int = 11, poly: int = 3) -> np.ndarray:
     return y if len(y) < window else signal.savgol_filter(y, window, poly)
 
 
-# def _auc_apg(wave: np.ndarray,
-#              start: int = AUC_START,
-#              end:   int = AUC_END) -> float:
-#     """Unsigned APG area between *start* and *end* samples (NaN if too short)."""
-#     if wave.size <= end:
-#         return np.nan
-#     apg = np.gradient(np.gradient(wave))       # APG = 2nd derivative
-#     return float(np.trapezoid(np.abs(apg[start:end+1])))
-
 def _auc_apg(apg_wave: np.ndarray,
              start: int = AUC_START,
              end:   int = AUC_END) -> float:
@@ -130,6 +118,7 @@ def _auc_apg(apg_wave: np.ndarray,
     mask = apg_wave > 0
     wave = apg_wave*mask
     return float(np.trapezoid(wave[start:end+1]))
+
 
 def _inflection_before_after(y: np.ndarray, peak_idx: int, threshold=1e-3) -> Tuple[bool, bool]:
     """Detect whether *a* zero-crossing of the 2nd derivative exists **before**
@@ -180,14 +169,12 @@ def label_entry(entry: Dict[str, Any], threshold) -> None:
     apg_waves = entry.get("individual_wave_derivs_apg_arr", [])
 
     classes = np.array([classify_wave(w, threshold) for w in waves], dtype=np.int8)
-    # entry["individual_waves_classes"] = classes
-    # entry["ensemble_class"] = int(classify_wave(entry.get("ensemble_wave", np.empty(0)), threshold=threshold))
+
     entry["individual_waves_classes"] = classes
     entry["ensemble_class"] = int(classify_wave(entry.get("ensemble_wave", np.empty(0)), 
                                                 threshold=threshold))
 
     # ───────────────── APG area (unsigned & signed) ──────────────────
-    # waves = entry.get("individual_waves", [])
     auc_waves = np.array([_auc_apg(w) for w in apg_waves])
     sign_wave_factor  = np.where(np.isin(classes, [1, 2]), -1, 1)
     entry["area_under_the_curve_unsign_wave"] = auc_waves
@@ -197,86 +184,6 @@ def label_entry(entry: Dict[str, Any], threshold) -> None:
     ens_sign = -1 if entry["ensemble_class"] in (1, 2) else 1
     entry["area_under_the_curve_unsign"] = ens_auc
     entry["area_under_the_curve_sign"]    = ens_sign * ens_auc
-
-
-# # ──────────────────────── quick visual AUC check ──────────────────────────
-# def plot_waves_with_auc(
-#     data_dict: Dict[str, Dict[str, Any]],
-#     n_examples: int = 6,
-#     use_ensemble_wave: bool = False,
-#     figsize: Tuple[int, int] = (12, 8),
-# ) -> None:
-#     """
-#     Pick *n_examples* subjects at random, plot their wave, shade the
-#     AUC window, and write the computed area under the curve (|APG|)
-#     into the title.
-
-#     Parameters
-#     ----------
-#     data_dict : dict
-#         Your usual subject‐id → entry dictionary (already labelled).
-#     n_examples : int, default 6
-#         How many waves you want to look at.
-#     use_ensemble_wave : bool, default False
-#         If True, plot ensemble waves; otherwise plot a random
-#         individual wave of each subject.
-#     figsize : tuple, default (12, 8)
-#         Size passed to ``plt.subplots``.
-#     """
-#     # -------- pick subjects ------------------------------------------------
-#     if n_examples > len(data_dict):
-#         n_examples = len(data_dict)
-#     chosen_ids = np.random.choice(list(data_dict.keys()), n_examples, replace=False)
-
-#     n_rows = int(np.ceil(n_examples / 3))
-#     fig, axes = plt.subplots(n_rows, 3, figsize=figsize, sharex=True)
-#     axes = axes.ravel()
-
-#     for ax, pid in zip(axes, chosen_ids):
-#         entry = data_dict[pid]
-
-#         # ----- get a wave ---------------------------------------------------
-#         if use_ensemble_wave:
-#             wave = entry.get("ensemble_wave", np.empty(0))
-#         else:
-#             waves = entry.get("individual_waves", [])
-#             wave = waves[np.random.randint(len(waves))] if len(waves) else np.empty(0)
-
-#         if wave.size == 0:
-#             ax.text(0.5, 0.5, "no wave", ha="center", va="center")
-#             ax.axis("off")
-#             continue
-
-#         # ----- compute and plot --------------------------------------------
-#         # Unsigned AUC:
-#         auc_val = _auc_apg(wave)   # unsigned ∫|APG|
-
-
-#         # Choose between signed and unsigned AUC:
-#         SIGNED = False
-#         if SIGNED: 
-#             sign = -1 if entry["ensemble_class"] in (1, 2) else 1
-#             auc_val = sign * auc_val
-
-
-#         x = np.arange(len(wave))
-#         ax.plot(x, wave, lw=1)
-
-#         # highlight AUC window
-#         ax.axvspan(AUC_START, AUC_END, color="grey", alpha=0.2)
-
-#         # pretty axis / annotation
-#         ax.set_title(f"PID {pid}  |AUC| = {auc_val:.1f}")
-#         ax.set_xlabel("sample")
-#         ax.set_ylabel("PPG amplitude")
-
-#     # hide any empty subplots
-#     for ax in axes[n_examples:]:
-#         ax.axis("off")
-
-#     fig.suptitle("Visual check of AUC calculation (shaded = integration window)")
-#     fig.tight_layout()
-#     plt.show()
 
 
 # ────────────────────────── dataframe & plotting helpers ───────────────────
@@ -347,6 +254,26 @@ def correlation_heatmap(
     sep = corr.columns.get_loc("rise_time_ms")       # position *between* the two vars
     ax.axvline(sep, color="black", lw=1)  # vertical lines
     ax.axhline(sep, color="black", lw=1)  # horizontal lines
+
+    # relabel all ticks with dictionary
+    tick_labels = {
+        "age": "Age [years]",
+        "bmi": "BMI [kg/m²]",
+        "height_m": "Height [m]",
+        "weight_kg": "Weight [kg]",
+        "average_hr": "Average HR [bpm]",
+        "baseline_sbp": "SBP [mmHg]",
+        "baseline_dbp": "DBP [mmHg]",
+        "rise_time_ms": "Rise-time [ms]",
+        "rise_time_norm": "Rise-time (norm.)",
+        # "area_under_the_curve_unsign": "APG area (unsigned)",
+        "area_under_the_curve_sign": "APG area (signed)",
+    }
+    # print([i for i in ax.get_xticklabels()])
+    # print([tick_labels.get(label, label) for label in ax.get_xticklabels()])
+    ax.set_xticklabels([tick_labels[label._text] for label in ax.get_xticklabels()]) # , rotation=45)
+    ax.set_yticklabels([tick_labels[label._text] for label in ax.get_yticklabels()]) #  rotation=45)
+    # ax.set_yticklabels([tick_labels.get(label, label) for label in ax.get_yticklabels()])
 
     fig.tight_layout()
     for ext in IMAGE_FORMATS:
@@ -452,18 +379,6 @@ def multivariate_regression(
             summary = sm_mod.summary().as_latex()
             (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.tex").write_text(summary)
 
-
-    # if "txt" in table_formats:
-    #     summary = sm_mod.summary().as_text()
-    # if "tex" in table_formats:
-    #     summary = sm_mod.summary().as_latex()
-    # summary_txt = sm_mod.summary().as_text()
-    # summary_tex = sm_mod.summary().as_latex()
-
-
-    # (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.txt").write_text(summary_txt)
-    # (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.tex").write_text(summary_tex)
-
     logging.info("Multivariate regression finished(R² = %.3f) for variable '%s'", r2, variable_to_predict)
 
 
@@ -481,15 +396,6 @@ def _get_variable_name_alias(variable_to_predict):
         variable_name_alias = variable_to_predict.replace("_", " ").title()
     return variable_name_alias
 
-# def _inflection_before_after(y: np.ndarray, peak_idx: int,
-#                              threshold: float) -> tuple[bool, bool]:
-#     d2 = np.gradient(np.gradient(y))
-#     zc = np.where(np.diff(np.sign(d2)))[0]
-#     before = any(abs(d2[i]) < threshold and i <  peak_idx for i in zc)
-#     after  = any(abs(d2[i]) < threshold and i >  peak_idx for i in zc)
-#     return before, after
-
-# FIX CLASS DISTRIBUTIONS; GET PLOTS AND LATEX TABLES!
 
 # ─────────────────────────────── CLI helpers ───────────────────────────────
 
@@ -506,7 +412,7 @@ def build_parser():
     p.add_argument("--verbose", action="store_true")
     p.add_argument("--inflect_thr", type=float, default=1e-2, # 3,
                      help="2nd-derivative threshold for inflection detection")
-    p.add_argument("--reg_set", choices=PREDICTOR_SETS.keys(), nargs="+", default=["core", "all", "core_plus_fitzpatrick"],
+    p.add_argument("--reg_set", choices=PREDICTOR_SETS.keys(), nargs="+", default=["core"], # , "all", "core_plus_fitzpatrick"],
                      help="Which predefined predictor set(s) to use. May be given multiple times to run multiple versions, e.g.  --reg_set all core")
 
 

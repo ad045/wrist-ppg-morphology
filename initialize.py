@@ -3,8 +3,8 @@
 
 # OUTPUT FORMATS 
 
-TABLE_FORMATS = ["txt", "tex"]
-IMAGE_FORMATS = ["png", "pdf"]  # for plots
+TABLE_FORMATS = ["txt"] #, "tex"]
+IMAGE_FORMATS = ["svg"] #, "png"] #, "pdf"]  # for plots
 
 
 # PATHS
