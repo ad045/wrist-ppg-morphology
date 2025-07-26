@@ -177,8 +177,8 @@ def process_with_pyPPG_for_subject(subj_data, pid):
         with open(PREPROCESSED_AURORA_DATA_PATH + "/skipped_subjects.csv", "a") as f:
             # If the file does not exist, create it and write the header
             if f.tell() == 0:  # Check if file is empty
-                f.write("pid, length_of_filtered_signal, reason\n")
-            f.write(f"{pid}, {len(s.filt_sig)}, 'length of filtered signal was too short'\n")
+                f.write("pid, length_of_original_signal, length_of_filtered_signal, reason\n")
+            f.write(f"{pid}, {len(s.v)}, {len(s.filt_sig)}, 'length of (filtered) signal was too short'\n")
         return None
 
     ppg_class = PPG(s)
@@ -524,12 +524,14 @@ def split_ppg_into_waves(ppg_signal, onsets, fs, resample_length=1000, min_wave_
         wave_resampled = np.interp(x_new, x_old, wave)
         line = np.linspace(wave_resampled[0], wave_resampled[-1], resample_length)
         wave_detrended = wave_resampled - line
+        # Normalize the detrended wave to [-1, 1]
         mn = np.min(wave_detrended)
         mx = np.max(wave_detrended)
-        if (mx - mn) < 1e-9:
-            wave_norm = wave_detrended
-        else:
-            wave_norm = 2 * (wave_detrended - mn) / (mx - mn) - 1.0
+        # wave_norm = 2 * (wave_detrended - mn) / (mx - mn) - 1.0
+        # Normalize to [0, 1]. Avoid division by zero if mx == mn (is hopefully not the case)
+        if abs(mx - mn) < 1e-9:
+            wave_norm = np.zeros_like(wave_detrended)
+        wave_norm = (wave_detrended - mn) / (mx - mn)
         
         # Logic to remove all waves that have entries in the middle 30-60% that are below lower_threshold (defaults to -0.1)
         if np.any(wave_norm[int(0.3 * resample_length):int(0.6 * resample_length)] < lower_threshold):
@@ -557,7 +559,7 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
         min_wave_sec = expected_period_sec * (1 - tolerance)
         max_wave_sec = expected_period_sec * (1 + tolerance)
         waves, onsets_kept, durations_waves = split_ppg_into_waves(ppg_signal, onsets, fs, resample_length, min_wave_sec, max_wave_sec, lower_threshold=lower_threshold)
-        subj_data["individual_waves"] = waves
+        subj_data["individual_waves"] = waves # normalized to [-1, 1]
         subj_data["fid_on_ppg"] = np.array(onsets_kept, dtype=int)
         subj_data["wave_durations"] = durations_waves
         
@@ -605,13 +607,15 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
         else:
             ensemble = np.zeros(resample_length)
         subj_data["ensemble_wave"] = ensemble
-        processed_ensemble = process_ppg_wave(ensemble)
-        try:
-            ppg_11, vpg_11, apg_11, jpg_11 = compute_derivatives_pyppg(processed_ensemble, fs=1000)
-        except Exception as e:
-            print(f"Error computing ensemble derivatives for {pid}: {e}")
-            ppg_11 = vpg_11 = apg_11 = jpg_11 = np.zeros(resample_length)
+        # processed_ensemble = process_ppg_wave(ensemble)
+        
+        # try:
+        #     ppg_11, vpg_11, apg_11, jpg_11 = compute_derivatives_pyppg(processed_ensemble, fs=1000)
+        # except Exception as e:
+        #     print(f"Error computing ensemble derivatives for {pid}: {e}")
+        #     ppg_11 = vpg_11 = apg_11 = jpg_11 = np.zeros(resample_length)
             
+        ppg_11, vpg_11, apg_11, jpg_11 = compute_derivatives_pyppg(ensemble, fs=1000)
         subj_data.update({
             "ensemble_ppg": ppg_11,
             "ensemble_vpg": vpg_11,
@@ -626,7 +630,7 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
         ijpg_arr = []
         
         for wave in waves:
-            processed_wave = process_ppg_wave(wave)
+            processed_wave = process_ppg_wave(wave) # normalized to [0, 1]
             try:
                 ippg, ivpg, iapg, ijpg = compute_derivatives_pyppg(processed_wave, fs=1000)
             except Exception as e:
@@ -657,7 +661,6 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
         subj_data["ensemble_vpg_avg"] = np.mean(ivpg_arr, axis=0)   
         subj_data["ensemble_apg_avg"] = np.mean(iapg_arr, axis=0)
         subj_data["ensemble_jpg_avg"] = np.mean(ijpg_arr, axis=0)
-
 
     return data_dict
 
@@ -727,41 +730,6 @@ def pipeline(dataset_type, raw_path, preprocessed_path):
 
     return "completed - saved as " + str(final_file)
 
-
-# # --- Main Execution ---
-
-# def main():
-    
-#     raw_path = Path(RAW_AURORA_DATA_PATH)
-#     preprocessed_path = Path(PREPROCESSED_AURORA_DATA_PATH)
-
-#     # base_path = Path("D:\\00_ppg_project\\aurora_data")
-#     # output_pt = base_path / "preprocessed"
-    
-#     # Choose dataset type: "oscillometric" or "auscultatory"
-#     print(pipeline(dataset_type="oscillometric", 
-#                     raw_path=raw_path,
-#                     preprocessed_path = preprocessed_path))
-    
-#     print(pipeline(dataset_type="auscultatory", 
-#                     raw_path=raw_path,
-#                     preprocessed_path = preprocessed_path))
-
-#     print("Merging datasets and adding regressors.")
-#     merge_datasets_and_add_regressors(preprocessed_path)
-
-
-# if __name__ == "__main__":
-#     main()
-
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Optional heavy dependencies are imported lazily where needed (pyPPG, DotMap)
-# ──────────────────────────────────────────────────────────────────────────────
-
-warnings.filterwarnings("ignore", category=FutureWarning)  # pandas noise
-
 # -----------------------------------------------------------------------------
 # 0.  Generic helpers (identical to original script)
 # -----------------------------------------------------------------------------
@@ -821,31 +789,31 @@ def _recompute_ensemble_and_derivatives(entry: dict, skip_derivatives: bool):
     entry["ensemble_ppg"] = ensemble
 
     if not skip_derivatives and ensemble.size:
-        proc = process_ppg_wave(ensemble)
+        proc = process_ppg_wave(ensemble) # normalized to [0, 1]
         ppg, vpg, apg, jpg = compute_derivatives_pyppg(proc)
         entry.update(ensemble_vpg=vpg, ensemble_apg=apg, ensemble_jpg=jpg)
 
 
-def postprocess_file(pt_path: Path, *, lower_threshold: float, skip_derivatives: bool):
-    """Clean **`pt_path`** in‑place and write a sibling *_filtered.pt* file."""
-    print(f"[INFO] Loading → {pt_path}")
-    data_dict = torch.load(pt_path, weights_only=False)
+# def postprocess_file(pt_path: Path, *, lower_threshold: float, skip_derivatives: bool):
+#     """Clean **`pt_path`** in‑place and write a sibling *_filtered.pt* file."""
+#     print(f"[INFO] Loading → {pt_path}")
+#     data_dict = torch.load(pt_path, weights_only=False)
 
-    kept, total = 0, 0
-    for entry in data_dict.values():
-        b, a = _filter_waves(entry, lower_threshold)
-        _recompute_ensemble_and_derivatives(entry, skip_derivatives)
-        kept += a
-        total += b
-    if total == 0:        # nothing to filter
-            print("[WARN] dictionary contains no waves – skipping filtering step")
-            return
-    print(f"[INFO] Kept {kept}/{total} waves ({kept/total*100:.1f} %)")
+#     kept, total = 0, 0
+#     for entry in data_dict.values():
+#         b, a = _filter_waves(entry, lower_threshold)
+#         _recompute_ensemble_and_derivatives(entry, skip_derivatives)
+#         kept += a
+#         total += b
+#     if total == 0:        # nothing to filter
+#             print("[WARN] dictionary contains no waves – skipping filtering step")
+#             return
+#     print(f"[INFO] Kept {kept}/{total} waves ({kept/total*100:.1f} %)")
 
-    out = pt_path.with_name(pt_path.stem + "_filtered.pt")
-    torch.save(data_dict, out)
-    print(f"[INFO] Saved cleaned dictionary → {out}")
-    return out
+#     out = pt_path.with_name(pt_path.stem + "_filtered.pt")
+#     torch.save(data_dict, out)
+#     print(f"[INFO] Saved cleaned dictionary → {out}")
+#     return out
 
 
 def _paths(dataset_type: str, raw_override: Path | None, out_override: Path | None):
@@ -888,6 +856,9 @@ def _parse_args():
 
 
 def main():  # noqa: D401 – simple main wrapper
+
+    warnings.filterwarnings("ignore", category=FutureWarning)  # pandas noise
+
     args = _parse_args()
 
     raw_path, preprocessed_path = _paths(
@@ -897,9 +868,10 @@ def main():  # noqa: D401 – simple main wrapper
     preprocessed_path = Path(preprocessed_path)
     
     if args.filter_only:
-        if args.input_file is None:
-            raise SystemExit("[ERROR] --filter_only requires --input_file")
-        postprocess_file(args.input_file, lower_threshold=args.lower_threshold, skip_derivatives=args.skip_derivatives)
+        print("Does not do anything right now any more. TODO: Remove this option.")
+        # if args.input_file is None:
+        #     raise SystemExit("[ERROR] --filter_only requires --input_file")
+        # postprocess_file(args.input_file, lower_threshold=args.lower_threshold, skip_derivatives=args.skip_derivatives)
         return
     
     if not args.skip_raw:
@@ -941,9 +913,11 @@ def main():  # noqa: D401 – simple main wrapper
     # Optional post‑processing immediately after raw stage
     # ---------------------------------------------------------------------
     if args.post_filter:
-        targets = out_files if out_files else [*Path(PREPROCESSED_AURORA_DATA_PATH).glob("data_dict_*.pt")]
-        for pt in targets:
-            postprocess_file(pt, lower_threshold=args.lower_threshold, skip_derivatives=args.skip_derivatives)
+        print("\n=== Post‑processing stage ===")
+        print("Does not do anything right now any more. TODO: Remove this option.")
+        # targets = out_files if out_files else [*Path(PREPROCESSED_AURORA_DATA_PATH).glob("data_dict_*.pt")]
+        # for pt in targets:
+        #     postprocess_file(pt, lower_threshold=args.lower_threshold, skip_derivatives=args.skip_derivatives)
 
 
 # -----------------------------------------------------------------------------

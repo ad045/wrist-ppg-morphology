@@ -1,5 +1,14 @@
 #!/usr/bin/env ppg_project
 
+
+# OUTPUT FORMATS 
+
+TABLE_FORMATS = ["txt", "tex"]
+IMAGE_FORMATS = ["png", "pdf"]  # for plots
+
+
+# PATHS
+
 from pathlib import Path
 import os
 

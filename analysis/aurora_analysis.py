@@ -49,7 +49,13 @@ sys.path.append(str(root))
 from initialize import (
     PREPROCESSED_AURORA_DATA_PATH,
     OUTPUT_REGRESSION_PATH,
+    TABLE_FORMATS,
+    IMAGE_FORMATS,
 )
+
+VA
+
+
 # from ..initialize import PREPROCESSED_AURORA_DATA_PATH, OUTPUT_REGRESSION_PATH -> or: get used to running it from the project root
 
 # ───────────────────────────── configuration ──────────────────────────────
@@ -96,7 +102,7 @@ PREDICTOR_SETS: dict[str, dict[str, list[str]]] = {
 TARGETS = ["rise_time_ms", "rise_time_norm"]
 
 # Configuration parameters for area under curve (AUC) calculation
-AUC_START, AUC_END = 200, 500          # sample range used for APG area (inclusive)
+AUC_START, AUC_END = 200, 800          # sample range used for APG area (inclusive)
 
 # ─────────────────────── wave-shape classification helpers ─────────────────
 
@@ -322,7 +328,7 @@ def univariate_plots(
     fig.suptitle(f"Univariate scatter plots for {_get_variable_name_alias(variable_to_predict)}", fontsize=16)
 
     fig.tight_layout()
-    for ext in ("png", "pdf"):
+    for ext in IMAGE_FORMATS:
         fig.savefig(FIG_DIR / f"univariate_corr{f'_{tag}' if tag else ''}.{ext}")
     plt.close(fig)
 
@@ -331,7 +337,8 @@ def univariate_plots(
 def correlation_heatmap(
         df: pd.DataFrame, 
         tag: str | None = None):
-    corr = df[PREDICTORS_CONT + ["rise_time_ms", "rise_time_norm", "area_under_the_curve_unsign", "area_under_the_curve_sign"]].corr()
+    # corr = df[PREDICTORS_CONT + ["rise_time_ms", "rise_time_norm", "area_under_the_curve_unsign", "area_under_the_curve_sign"]].corr()
+    corr = df[PREDICTORS_CONT + ["rise_time_ms", "rise_time_norm", "area_under_the_curve_sign"]].corr()
     mask = np.triu(np.ones_like(corr, bool), k=1) # remove k=1 to remove the diagnoal values 
     fig, ax = plt.subplots(figsize=(8,8))
     sns.heatmap(corr, mask=mask, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
@@ -342,7 +349,7 @@ def correlation_heatmap(
     ax.axhline(sep, color="black", lw=1)  # horizontal lines
 
     fig.tight_layout()
-    for ext in ("png", "pdf"):
+    for ext in IMAGE_FORMATS:
         fig.savefig(FIG_DIR / f"corr_heatmap{f'_{tag}' if tag else ''}.{ext}")
     plt.close(fig)
 
@@ -355,7 +362,7 @@ def rise_time_hist(
     sns.histplot(df["rise_time_ms"].dropna(), bins=30, ax=ax)
     ax.set_xlabel("rise-time [ms]")
     fig.tight_layout()
-    for ext in ("png", "pdf"):
+    for ext in IMAGE_FORMATS:
         fig.savefig(FIG_DIR / f"rise_time_hist{f'_{tag}' if tag else ''}.{ext}")
     plt.close(fig)
 
@@ -426,21 +433,36 @@ def multivariate_regression(
     ax.set_ylabel("Predicted " + variable_name_alias)
     ax.set_title(f"Linear model  R²={r2:.3f}")
     fig.tight_layout()
-    for ext in ("png", "pdf"):
-        # fig.savefig(FIG_DIR / f"actual_vs_pred_{variable_to_predict}.{ext}")
+    for ext in IMAGE_FORMATS:
         fig.savefig(FIG_DIR / f"actual_vs_pred_{variable_to_predict}{suffix}.{ext}")
     plt.close(fig)
 
     # statsmodels OLS (for pretty summary) ---------------------------------
     X_sm = pd.DataFrame(X_scaled, columns=feature_names) # give columns names
     X_sm = sm.add_constant(X_sm, prepend=True)  # add intercept term
+
     sm_mod = sm.OLS(y, X_sm).fit()
-    summary_txt = sm_mod.summary().as_text()
-    summary_tex = sm_mod.summary().as_latex()
+
+    # save tables
+    for fmt in TABLE_FORMATS:
+        if fmt == "txt":
+            summary = sm_mod.summary().as_text()
+            (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.txt").write_text(summary)
+        elif fmt == "tex":
+            summary = sm_mod.summary().as_latex()
+            (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.tex").write_text(summary)
 
 
-    (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.txt").write_text(summary_txt)
-    (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.tex").write_text(summary_tex)
+    # if "txt" in table_formats:
+    #     summary = sm_mod.summary().as_text()
+    # if "tex" in table_formats:
+    #     summary = sm_mod.summary().as_latex()
+    # summary_txt = sm_mod.summary().as_text()
+    # summary_tex = sm_mod.summary().as_latex()
+
+
+    # (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.txt").write_text(summary_txt)
+    # (TAB_DIR / f"ols_summary_{variable_to_predict}{suffix}.tex").write_text(summary_tex)
 
     logging.info("Multivariate regression finished(R² = %.3f) for variable '%s'", r2, variable_to_predict)
 
@@ -539,7 +561,6 @@ def main(argv: List[str] | None = None):
 
         for set_name in args.reg_set:
             univariate_plots(df, variable_to_predict="rise_time_ms", tag=set_name)
-            univariate_plots(df, variable_to_predict="area_under_the_curve_unsign", tag=set_name)
             univariate_plots(df, variable_to_predict="area_under_the_curve_sign", tag=set_name)
 
             correlation_heatmap(df, tag=set_name)
@@ -547,7 +568,6 @@ def main(argv: List[str] | None = None):
 
             # multivariate_regression(df, variable_to_predict="rise_time_ms")
             # # multivariate_regression(df, variable_to_predict="rise_time_norm")
-            # multivariate_regression(df, variable_to_predict="area_under_the_curve_unsign")
             # multivariate_regression(df, variable_to_predict="area_under_the_curve_sign")
 
             pred_cont = PREDICTOR_SETS[set_name]["cont"]
@@ -556,10 +576,6 @@ def main(argv: List[str] | None = None):
             multivariate_regression(df, pred_cont, pred_cat,
                                     variable_to_predict="rise_time_ms",
                                     tag=set_name)
-
-            # multivariate_regression(df, pred_cont, pred_cat,
-            #                         variable_to_predict="area_under_the_curve_unsign",
-            #                         tag=set_name)
 
             multivariate_regression(df, pred_cont, pred_cat,
                                     variable_to_predict="area_under_the_curve_sign",
