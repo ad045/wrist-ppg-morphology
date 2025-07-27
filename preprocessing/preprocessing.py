@@ -24,15 +24,12 @@ Usage examples
 **Full pipeline** (pre + post in one go):
 ```bash
 python -m preprocessing \
-       --post_filter \
        --lower_threshold -0.15
 ```
 
 **Just post‑process an existing dictionary**:
 ```bash
 python -m preprocessing \
-       --filter_only \
-       --input_file /data/AURORA/preprocessed/data_dict_aurora_final_oscillometric_2.pt \
        --lower_threshold -0.1
 ```
 """
@@ -356,38 +353,35 @@ def split_ppg_into_waves(ppg_signal, onsets, fs, resample_length=1000, min_wave_
     processed_waves = []
     onsets_kept = []
     durations_waves = []
+
     for i in range(len(onsets) - 1):
         start_i = onsets[i]
         end_i = onsets[i+1]
         wave = ppg_signal[start_i:end_i]
         wave_samples = len(wave)
         wave_duration_sec = wave_samples / fs
+
+        # Check if the wave duration is within the specified range
         if wave_duration_sec < min_wave_sec or wave_duration_sec > max_wave_sec:
             continue
-        if wave_samples < 2:
-            continue
+
+        # Resample the wave to resample_length samples
         x_old = np.linspace(0, 1, wave_samples)
         x_new = np.linspace(0, 1, resample_length)
         wave_resampled = np.interp(x_new, x_old, wave)
-        line = np.linspace(wave_resampled[0], wave_resampled[-1], resample_length)
-        wave_detrended = wave_resampled - line
-        # Normalize the detrended wave to [-1, 1]
-        mn = np.min(wave_detrended)
-        mx = np.max(wave_detrended)
-        # wave_norm = 2 * (wave_detrended - mn) / (mx - mn) - 1.0
-        # Normalize to [0, 1]. Avoid division by zero if mx == mn (is hopefully not the case)
-        if abs(mx - mn) < 1e-9:
-            wave_norm = np.zeros_like(wave_detrended)
-        wave_norm = (wave_detrended - mn) / (mx - mn)
+
+        # Detrend and normalize the wave
+        wave_norm = detrend_and_normalize(wave_resampled)
         
         # Logic to remove all waves that have entries in the middle 30-60% that are below lower_threshold (defaults to -0.1)
         if np.any(wave_norm[int(0.3 * resample_length):int(0.6 * resample_length)] < lower_threshold):
-            # print(f"Wave from {start_i} to {end_i} has low values in the middle 30-60% and is skipped.")
             continue
 
+        # Append the processed wave, their onsets, and their durations
         processed_waves.append(wave_norm)
         onsets_kept.append(start_i)
         durations_waves.append(wave_duration_sec)
+
     return processed_waves, onsets_kept, durations_waves
 
 
@@ -433,7 +427,7 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
             rise_times_ms.append(rise_time_ms)    
             # print("rise time norm", rise_time_norm)
             # print("rise time ms", rise_time_ms)
-        subj_data["rise_times_norm"] = rise_times_norm
+        subj_data["rise_times_norm"] = rise_times_norm 
         subj_data["rise_times_ms"] = rise_times_ms
         
         # Get average (median) rise time per subject 
@@ -462,13 +456,15 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
         #     print(f"Error computing ensemble derivatives for {pid}: {e}")
         #     ppg_11 = vpg_11 = apg_11 = jpg_11 = np.zeros(resample_length)
             
-        ppg_11, vpg_11, apg_11, jpg_11 = compute_derivatives_pyppg(ensemble, fs=1000)
-        subj_data.update({
-            "ensemble_ppg": ppg_11,
-            "ensemble_vpg": vpg_11,
-            "ensemble_apg": apg_11,
-            "ensemble_jpg": jpg_11
-        })
+        # This is not used afterwards, but kept for consistency with prior scripts  !!! TODO: check if needed, maybe remove later
+        # ppg_11, vpg_11, apg_11, jpg_11 = compute_derivatives_pyppg(ensemble, fs=1000)
+        # subj_data.update({
+        #     "ensemble_ppg": ppg_11,
+        #     "ensemble_vpg": vpg_11,
+        #     "ensemble_apg": apg_11,
+        #     "ensemble_jpg": jpg_11
+        # })
+
         # Compute derivatives for each individual wave
         # individual_waves_derivatives = []
         ippg_arr = []
@@ -477,7 +473,7 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
         ijpg_arr = []
         
         for wave in waves:
-            processed_wave = process_ppg_wave(wave) # normalized to [0, 1]
+            processed_wave = detrend_and_normalize(wave) # normalized to [-1, 1]
             try:
                 ippg, ivpg, iapg, ijpg = compute_derivatives_pyppg(processed_wave, fs=1000)
             except Exception as e:
@@ -488,15 +484,6 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
             ivpg_arr.append(ivpg)
             iapg_arr.append(iapg)
             ijpg_arr.append(ijpg)
-            
-        #     derivative_dict = {
-        #         "ensemble_ppg": ippg,
-        #         "ensemble_vpg": ivpg,
-        #         "ensemble_apg": iapg,
-        #         "ensemble_jpg": ijpg
-        #     }
-        #     individual_waves_derivatives.append(derivative_dict)
-        # subj_data["individual_waves_derivatives"] = individual_waves_derivatives
         
         subj_data["individual_wave_derivs_ppg_arr"] = ippg_arr
         subj_data["individual_wave_derivs_vpg_arr"] = ivpg_arr
@@ -581,12 +568,12 @@ def pipeline(dataset_type, raw_path, preprocessed_path):
 # 0.  Generic helpers (identical to original script)
 # -----------------------------------------------------------------------------
 
-def process_ppg_wave(wave: np.ndarray) -> np.ndarray:
-    """Detrend PPG *wave* and min‑max normalise it to the **[0, 1]** range."""
+def detrend_and_normalize(wave: np.ndarray) -> np.ndarray:
+    """Detrend PPG *wave* and min‑max normalise it to the **[-1, 1]** range."""
     trend = np.linspace(wave[0], wave[-1], len(wave))
     det = wave - trend
     mn, mx = det.min(), det.max()
-    return np.zeros_like(det) if abs(mx - mn) < 1e-9 else (det - mn) / (mx - mn)
+    return np.zeros_like(det) if abs(mx - mn) < 1e-9 else 2 * (det - mn) / (mx - mn) - 1
 
 
 def compute_derivatives_pyppg(ensemble_wave: np.ndarray, fs: int = 1_000):
@@ -618,27 +605,27 @@ def compute_derivatives_pyppg(ensemble_wave: np.ndarray, fs: int = 1_000):
 # 2.  New post‑processing helpers (imported by both modes)
 # -----------------------------------------------------------------------------
 
-def _filter_waves(entry: dict, lower_threshold: float) -> tuple[int, int]:
-    """Drop PWs whose samples 300‑600 are below *lower_threshold*.
+# def _filter_waves(entry: dict, lower_threshold: float) -> tuple[int, int]:
+#     """Drop PWs whose samples 300‑600 are below *lower_threshold*.
 
-    Returns a tuple with the number of waves **before** and **after** filtering.
-    """
-    before = entry.get("individual_waves", [])
-    after = [w for w in before if len(w) >= 600 and not np.any(w[300:601] < lower_threshold)]
-    entry["individual_waves"] = after
-    return len(before), len(after)
+#     Returns a tuple with the number of waves **before** and **after** filtering.
+#     """
+#     before = entry.get("individual_waves", [])
+#     after = [w for w in before if len(w) >= 600 and not np.any(w[300:601] < lower_threshold)]
+#     entry["individual_waves"] = after
+#     return len(before), len(after)
 
 
-def _recompute_ensemble_and_derivatives(entry: dict, skip_derivatives: bool):
-    """Recalculate ensemble beat and, optionally, its derivatives."""
-    waves = entry.get("individual_waves", [])
-    ensemble = np.mean(waves, axis=0) if waves else np.zeros(1_000)
-    entry["ensemble_ppg"] = ensemble
+# def _recompute_ensemble_and_derivatives(entry: dict, skip_derivatives: bool):
+#     """Recalculate ensemble beat and, optionally, its derivatives."""
+#     waves = entry.get("individual_waves", [])
+#     ensemble = np.mean(waves, axis=0) if waves else np.zeros(1_000)
+#     entry["ensemble_ppg"] = ensemble
 
-    if not skip_derivatives and ensemble.size:
-        proc = process_ppg_wave(ensemble) # normalized to [0, 1]
-        ppg, vpg, apg, jpg = compute_derivatives_pyppg(proc)
-        entry.update(ensemble_vpg=vpg, ensemble_apg=apg, ensemble_jpg=jpg)
+#     if not skip_derivatives and ensemble.size:
+#         proc = detrend_and_normalize(ensemble) # normalized to [-1, 1]
+#         ppg, vpg, apg, jpg = compute_derivatives_pyppg(proc)
+#         entry.update(ensemble_vpg=vpg, ensemble_apg=apg, ensemble_jpg=jpg)
 
 
 # def postprocess_file(pt_path: Path, *, lower_threshold: float, skip_derivatives: bool):
@@ -694,9 +681,9 @@ def _parse_args():
 
     # Post‑processing flags
     g = p.add_argument_group("post‑processing options")
-    g.add_argument("--post_filter", action="store_true", help="Run filtering pass after raw preprocessing")
-    g.add_argument("--filter_only", action="store_true", help="Only run the filtering pass on an existing *.pt file")
-    g.add_argument("--input_file", type=Path, help="Path to an existing *.pt file (required with --filter_only)")
+    # g.add_argument("--post_filter", action="store_true", help="Run filtering pass after raw preprocessing")
+    # g.add_argument("--filter_only", action="store_true", help="Only run the filtering pass on an existing *.pt file")
+    # g.add_argument("--input_file", type=Path, help="Path to an existing *.pt file (required with --filter_only)")
     g.add_argument("--lower_threshold", type=float, default=-0.1, help="Threshold for PW mid‑segment test (default −0.1)")
     g.add_argument("--skip_derivatives", action="store_true", help="Do *not* rebuild derivatives during post‑processing")
     return p.parse_args()
@@ -714,12 +701,12 @@ def main():  # noqa: D401 – simple main wrapper
     raw_path = Path(raw_path)
     preprocessed_path = Path(preprocessed_path)
     
-    if args.filter_only:
-        print("Does not do anything right now any more. TODO: Remove this option.")
-        # if args.input_file is None:
-        #     raise SystemExit("[ERROR] --filter_only requires --input_file")
-        # postprocess_file(args.input_file, lower_threshold=args.lower_threshold, skip_derivatives=args.skip_derivatives)
-        return
+    # if args.filter_only:
+    #     print("Does not do anything right now any more. TODO: Remove this option.")
+    #     # if args.input_file is None:
+    #     #     raise SystemExit("[ERROR] --filter_only requires --input_file")
+    #     # postprocess_file(args.input_file, lower_threshold=args.lower_threshold, skip_derivatives=args.skip_derivatives)
+    #     return
     
     if not args.skip_raw:
         print("Raw stage is going to be performed (no --skip_raw)")
@@ -758,10 +745,10 @@ def main():  # noqa: D401 – simple main wrapper
 
     # ---------------------------------------------------------------------
     # Optional post‑processing immediately after raw stage
-    # ---------------------------------------------------------------------
-    if args.post_filter:
-        print("\n=== Post‑processing stage ===")
-        print("Does not do anything right now any more. TODO: Remove this option.")
+    # # ---------------------------------------------------------------------
+    # if args.post_filter:
+    #     print("\n=== Post‑processing stage ===")
+    #     print("Does not do anything right now any more. TODO: Remove this option.")
         # targets = out_files if out_files else [*Path(PREPROCESSED_AURORA_DATA_PATH).glob("data_dict_*.pt")]
         # for pt in targets:
         #     postprocess_file(pt, lower_threshold=args.lower_threshold, skip_derivatives=args.skip_derivatives)

@@ -112,9 +112,6 @@ def _auc_apg(apg_wave: np.ndarray,
              start: int = AUC_START,
              end:   int = AUC_END) -> float:
     """Unsigned APG area between *start* and *end* samples (NaN if too short)."""
-    # if apg_wave.size <= end:
-    
-    # only get the APG area between start and end, that is > 0 
     mask = apg_wave > 0
     wave = apg_wave*mask
     return float(np.trapezoid(wave[start:end+1]))
@@ -199,7 +196,7 @@ def _make_dataframe(data_dict: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
             "rise_time_ms": d.get("average_rise_time_ms", np.nan),
             "rise_time_norm": d.get("average_rise_time_norm", np.nan),
             "ensemble_class": d.get("ensemble_class", np.nan),
-            "area_under_the_curve_unsign": d.get("area_under_the_curve_unsign", np.nan),
+            "area_under_the_curve_unsign": d.get("area_under_the_curve_unsign", np.nan), # so the AUC for the ensemble wave
             "area_under_the_curve_sign":     d.get("area_under_the_curve_sign",     np.nan),
         })
     df = pd.DataFrame(rows)
