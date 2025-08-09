@@ -63,11 +63,17 @@ TAB_DIR   = Path(OUTPUT_REGRESSION_PATH) / "tables"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 TAB_DIR.mkdir(parents=True, exist_ok=True)
 
+# PREDICTORS_CONT = [
+#     "age", "baseline_sbp", "baseline_dbp", "height_m",
+#     "weight_kg", 
+#     "average_hr", "bmi",
+# ]
+
 PREDICTORS_CONT = [
-    "age", "baseline_sbp", "baseline_dbp", "height_m",
-    "weight_kg", 
-    "average_hr", "bmi",
+    "age", "bmi", "height_m", 
+    "average_hr", "baseline_sbp", "baseline_dbp"
 ]
+
 PREDICTORS_CAT  = [
     "gender", "cvd_meds", "fitzpatrick_scale",
     "pressure_quality", "optical_quality", "oscillo_or_auscul",
@@ -242,7 +248,7 @@ def correlation_heatmap(
         df: pd.DataFrame, 
         tag: str | None = None):
     # corr = df[PREDICTORS_CONT + ["rise_time_ms", "rise_time_norm", "area_under_the_curve_unsign", "area_under_the_curve_sign"]].corr()
-    corr = df[PREDICTORS_CONT + ["rise_time_ms", "rise_time_norm", "area_under_the_curve_sign"]].corr()
+    corr = df[PREDICTORS_CONT + ["rise_time_ms", "area_under_the_curve_sign"]].corr()
     mask = np.triu(np.ones_like(corr, bool), k=1) # remove k=1 to remove the diagnoal values 
     fig, ax = plt.subplots(figsize=(8,8))
     sns.heatmap(corr, mask=mask, annot=True, fmt=".2f", cmap="coolwarm", ax=ax)
@@ -254,17 +260,17 @@ def correlation_heatmap(
 
     # relabel all ticks with dictionary
     tick_labels = {
-        "age": "Age [years]",
-        "bmi": "BMI [kg/m²]",
-        "height_m": "Height [m]",
-        "weight_kg": "Weight [kg]",
-        "average_hr": "Average HR [bpm]",
-        "baseline_sbp": "SBP [mmHg]",
-        "baseline_dbp": "DBP [mmHg]",
-        "rise_time_ms": "Rise-time [ms]",
-        "rise_time_norm": "Rise-time (norm.)",
+        "age": "Age\n[years]",
+        "bmi": "BMI\n[kg/m²]",
+        "height_m": "Height\n[m]",
+        "weight_kg": "Weight\n[kg]",
+        "average_hr": "Average HR\n[bpm]",
+        "baseline_sbp": "SBP\n[mmHg]",
+        "baseline_dbp": "DBP\n[mmHg]",
+        "rise_time_ms": "Rise-time\n[ms]",
+        "rise_time_norm": "Rise-time\n(norm.)",
         # "area_under_the_curve_unsign": "APG area (unsigned)",
-        "area_under_the_curve_sign": "APG area (signed)",
+        "area_under_the_curve_sign": "AUC\n[signed]",
     }
     # print([i for i in ax.get_xticklabels()])
     # print([tick_labels.get(label, label) for label in ax.get_xticklabels()])
