@@ -1,24 +1,100 @@
-# The PPG Project - Describing PPG pulse wave shapes recorded at the wrist and their influences 
+# Clean PPG Project
 
+A toolkit for preprocessing, analysing, and comparing photoplethysmography (PPG) pulse waves recorded at the wrist. It combines a custom preprocessing pipeline with the [pyPPG](pyPPG) library to extract fiducials, derivatives, and morphological features from datasets such as AURORA‑BP and MAUS.
 
-# How to: 
-- (In theory: download pyPPG and put it into right folder. For now, the pyPPG folder is already embedded)
-- Change paths in initialize.py, as they are hard coded and currently point to the data on my machine. Download raw data. 
-- Run ```notebooks/00_preprocessing.ipynb``` to preprocess the AURORA-BP dataset
-- Run ```notebooks/01_comparison_different_algorithms.ipynb``` to compare the preprocessing of pyPPG (developed for PPG signals recorded at the finger), NeuroKit2 (also developed for PPG signals recorded at the finger), and the preprocessing of the custom pipeline
-- (For now, will be changed to the same style as the others: Run ```analysis/aurora_analysis.py``` to produce the multivariate analysis) 
+## Repository layout
 
+```
+preprocessing/        Pre‑ and post‑processing pipeline
+analysis/             Wave classification and statistical analysis
+notebooks/            Jupyter notebooks for exploration and algorithm comparison
+pyPPG/                Embedded copy of the pyPPG library
+initialize.py         User configurable paths and output directories
+```
 
-# To-Dos: 
-- The area under the curve is not introduced in the clean skripts here perfectly - the skript is currently using the "classes", to make the AUC positive or negative depending on whether the first or second peak is higher. This has it's issues, and will need to be re-introduced. 
-- Clean up the output folder. 
-- Make it a choice to produce either pdfs or pngs (or both). Currently, both are always created for ease of putting it into my slide-creation-application (pdf does not work here) and into latex (png is not vector based). 
+## Installation
 
-# Want-to-Dos: 
-- Seeing if (when age, bmi, etc are given) gender and fritzpartick scale make an significant difference in PW morphology. This is just out of pure interest.  
-- There could be more interesting stuff in diabetes patients... -> Preprocess those subjects and put them in a seperate folder for analysis? 
+1. Create a Python 3.10+ environment and activate it.
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # Linux/macOS
+   # .\.venv\Scripts\activate for Windows PowerShell
+   ```
+2. Install the required packages. The project relies on common scientific‑Python
+   libraries such as `numpy`, `pandas`, `scipy`, `torch`, `matplotlib`, `seaborn`,
+   `statsmodels`, `scikit-learn`, `neurokit2`, and `dotmap`.
+   ```bash
+   pip install numpy pandas scipy torch matplotlib seaborn statsmodels scikit-learn neurokit2 dotmap
+   ```
+   *(A requirements file is not yet available.)*
 
-# Notes: 
-- Six subjects did not have > 15 seconds recording >> were removed (see /Users/adrian/Documents/01_projects/02_clean_ppg/data/preprocessed/skipped_subjects.csv)
-- The code has been heavily cleaned up with the help of LLMs. 
+## Preparing data
+
+All project‑specific paths live in [`initialize.py`](initialize.py). Update these
+constants to point to your copies of the datasets and the desired output
+locations before running any scripts. Missing directories are created
+automatically.
+
+## Preprocessing
+
+The [`preprocessing`](preprocessing) module handles both raw‑data
+pre‑processing and optional post‑processing (threshold‑based filtering and
+recomputation of derivatives).
+
+- **Full pipeline**
+  ```bash
+  python -m preprocessing --lower_threshold -0.15
+  ```
+- **Post‑process an existing dictionary only**
+  ```bash
+  python -m preprocessing --lower_threshold -0.1
+  ```
+
+Each run produces `data_dict_*.pt` files containing individual and ensemble
+pulse waves alongside their derivatives.
+
+## Analysis
+
+Scripts in [`analysis`](analysis) operate on the preprocessed dictionaries:
+
+- [`analysis/aurora_analysis.py`](analysis/aurora_analysis.py) classifies each
+  pulse wave using a five‑class decision tree and performs regression analyses.
+  It generates figures and tables in `output/regression/` and writes the
+  updated dictionary with wave‑shape classes.
+- [`analysis/compare_durations/`](analysis/compare_durations) provides utilities
+  to benchmark processing times for different algorithms.
+- [`analysis/plot_age_stratified_ensemble_waves.py`](analysis/plot_age_stratified_ensemble_waves.py)
+  visualises ensemble waveforms across age groups.
+
+## Notebooks
+
+The `notebooks/` directory contains exploratory material:
+
+- `00_preprocessing.ipynb` – preprocess the AURORA‑BP dataset.
+- `01_comparison_different_algorithms.ipynb` – compare pyPPG, NeuroKit2, and the
+  custom pipeline.
+- `01_5_multivariate_analysis.ipynb` – multivariate analysis examples.
+- `02_*` – additional derivation and plotting experiments.
+
+## pyPPG library
+
+The `pyPPG/` directory is an embedded copy of the pyPPG library. The project
+uses its routines for fiducial extraction, derivative computation, and
+biomarker generation; the library can also be used independently.
+
+## Contributing
+
+Issues and pull requests are welcome. The repository does not yet define coding
+standards or automated checks, but please run `pytest` to ensure that existing
+code behaves as expected before submitting changes.
+
+## License
+
+No explicit licence is provided. Contact the author for usage permissions.
+
+## Acknowledgements
+
+- AURORA‑BP and MAUS datasets
+- The pyPPG community
+- Contributors to open‑source scientific‑Python libraries
 
