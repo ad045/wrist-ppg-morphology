@@ -1,100 +1,38 @@
 # Clean PPG Project
 
-A toolkit for preprocessing, analysing, and comparing photoplethysmography (PPG) pulse waves recorded at the wrist. It combines a custom preprocessing pipeline with the [pyPPG](pyPPG) library to extract fiducials, derivatives, and morphological features from datasets such as AURORA‑BP and MAUS.
+A toolkit for preprocessing, analysing, and comparing photoplethysmography (PPG) pulse waves recorded at the wrist. It combines a custom pipeline wrapped around the [pyPPG](pyPPG) library to extract fiducials, derivatives, and morphological features from datasets such as [AURORA‑BP](https://ieeexplore.ieee.org/document/9721156) and [MAUS](https://ieee-dataport.org/open-access/maus-dataset-mental-workload-assessment-n-back-task-using-wearable-sensor).
 
 ## Repository layout
 
 ```
+notebooks/            The entry point into the pipelines. Run individual scripts to conveniently process and analyze the data
+initialize.py         User configurable paths and output directories
+
 preprocessing/        Pre‑ and post‑processing pipeline
 analysis/             Wave classification and statistical analysis
-notebooks/            Jupyter notebooks for exploration and algorithm comparison
 pyPPG/                Embedded copy of the pyPPG library
-initialize.py         User configurable paths and output directories
 ```
 
 ## Installation
 
 1. Create a Python 3.10+ environment and activate it.
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Linux/macOS
-   # .\.venv\Scripts\activate for Windows PowerShell
+   conda env create -f environment.yaml
    ```
-2. Install the required packages. The project relies on common scientific‑Python
-   libraries such as `numpy`, `pandas`, `scipy`, `torch`, `matplotlib`, `seaborn`,
-   `statsmodels`, `scikit-learn`, `neurokit2`, and `dotmap`.
-   ```bash
-   pip install numpy pandas scipy torch matplotlib seaborn statsmodels scikit-learn neurokit2 dotmap
-   ```
-   *(A requirements file is not yet available.)*
+2. Install pyPPG into the main folder (i.e. replace the current placeholder folder ['pyPPG'](pyPPG)). Then go into ['pyPPG/fiducials.py'](pyPPG/fiducials.py), and replace all 'np.NaN' with 'np.nan', as numpy > 2.0 does not further support 'np.NaN'.
 
-## Preparing data
+## Setup
 
-All project‑specific paths live in [`initialize.py`](initialize.py). Update these
-constants to point to your copies of the datasets and the desired output
-locations before running any scripts. Missing directories are created
-automatically.
-
-## Preprocessing
-
-The [`preprocessing`](preprocessing) module handles both raw‑data
-pre‑processing and optional post‑processing (threshold‑based filtering and
-recomputation of derivatives).
-
-- **Full pipeline**
-  ```bash
-  python -m preprocessing --lower_threshold -0.15
-  ```
-- **Post‑process an existing dictionary only**
-  ```bash
-  python -m preprocessing --lower_threshold -0.1
-  ```
-
-Each run produces `data_dict_*.pt` files containing individual and ensemble
-pulse waves alongside their derivatives.
-
-## Analysis
-
-Scripts in [`analysis`](analysis) operate on the preprocessed dictionaries:
-
-- [`analysis/aurora_analysis.py`](analysis/aurora_analysis.py) classifies each
-  pulse wave using a five‑class decision tree and performs regression analyses.
-  It generates figures and tables in `output/regression/` and writes the
-  updated dictionary with wave‑shape classes.
-- [`analysis/compare_durations/`](analysis/compare_durations) provides utilities
-  to benchmark processing times for different algorithms.
-- [`analysis/plot_age_stratified_ensemble_waves.py`](analysis/plot_age_stratified_ensemble_waves.py)
-  visualises ensemble waveforms across age groups.
+Update path definitions in [`initialize.py`](initialize.py) to point to your copies of the datasets and the desired output locations before running any scripts. 
+Missing directories are created automatically.
 
 ## Notebooks
 
-The `notebooks/` directory contains exploratory material:
+The `notebooks/` directory provides jupyter notebooks that conveniently lead through the functionalities of this pipeline. We recommend to run them in the following order: 
 
 - `00_preprocessing.ipynb` – preprocess the AURORA‑BP dataset.
-- `01_comparison_different_algorithms.ipynb` – compare pyPPG, NeuroKit2, and the
-  custom pipeline.
-- `01_5_multivariate_analysis.ipynb` – multivariate analysis examples.
-- `02_*` – additional derivation and plotting experiments.
-
-## pyPPG library
-
-The `pyPPG/` directory is an embedded copy of the pyPPG library. The project
-uses its routines for fiducial extraction, derivative computation, and
-biomarker generation; the library can also be used independently.
-
-## Contributing
-
-Issues and pull requests are welcome. The repository does not yet define coding
-standards or automated checks, but please run `pytest` to ensure that existing
-code behaves as expected before submitting changes.
-
-## License
-
-No explicit licence is provided. Contact the author for usage permissions.
-
-## Acknowledgements
-
-- AURORA‑BP and MAUS datasets
-- The pyPPG community
-- Contributors to open‑source scientific‑Python libraries
+- `01_comparison_different_algorithms.ipynb` – compare pyPPG, NeuroKit2, and this custom wrapper.
+- `02_multivariate_analysis.ipynb` – multivariate analysis examples.
+- `03_plotting_derivations_AURORA.ipynb` – additional derivation and plotting experiments.
+- `04_comparing_fPPG_and_wPPG_PWs_for_MAUS` - comparison of wrist and finger pulse wave morphologies.
 

@@ -54,20 +54,12 @@ from initialize import (
 )
 
 # ───────────────────────────── configuration ──────────────────────────────
-# DEFAULT_DICT_PATH = Path(__file__).resolve().with_name("data_dict_osc_auc_with_derivatives.pt")
 DEFAULT_DICT_PATH = Path(PREPROCESSED_AURORA_DATA_PATH) / "data_dict_osc_auc_with_derivatives.pt"
-# OUT_DIR   = Path(__file__).resolve().with_name("out")
 
 FIG_DIR   = Path(OUTPUT_REGRESSION_PATH) / "figures"
 TAB_DIR   = Path(OUTPUT_REGRESSION_PATH) / "tables"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 TAB_DIR.mkdir(parents=True, exist_ok=True)
-
-# PREDICTORS_CONT = [
-#     "age", "baseline_sbp", "baseline_dbp", "height_m",
-#     "weight_kg", 
-#     "average_hr", "bmi",
-# ]
 
 PREDICTORS_CONT = [
     "age", "bmi", "height_m", 
@@ -98,14 +90,13 @@ PREDICTOR_SETS: dict[str, dict[str, list[str]]] = { # Include all variable sets 
                  "average_hr", "baseline_sbp", "baseline_dbp", "fitzpatrick_scale"],
         "cat":  [],
     },
-    # add more here 
 }
 
 
 TARGETS = ["rise_time_ms", "rise_time_norm"]
 
 # Configuration parameters for area under curve (AUC) calculation
-AUC_START, AUC_END = 200, 800          # sample range used for APG area (inclusive)
+AUC_START, AUC_END = 200, 800 # sample range used for APG area (inclusive)
 
 # ─────────────────────── wave-shape classification helpers ─────────────────
 
@@ -247,7 +238,7 @@ def univariate_plots(
 def correlation_heatmap(
         df: pd.DataFrame, 
         tag: str | None = None):
-    # corr = df[PREDICTORS_CONT + ["rise_time_ms", "rise_time_norm", "area_under_the_curve_unsign", "area_under_the_curve_sign"]].corr()
+    
     corr = df[PREDICTORS_CONT + ["rise_time_ms", "area_under_the_curve_sign"]].corr()
     mask = np.triu(np.ones_like(corr, bool), k=1) # remove k=1 to remove the diagnoal values 
     fig, ax = plt.subplots(figsize=(8,8))
@@ -269,14 +260,11 @@ def correlation_heatmap(
         "baseline_dbp": "DBP\n[mmHg]",
         "rise_time_ms": "Rise-time\n[ms]",
         "rise_time_norm": "Rise-time\n(norm.)",
-        # "area_under_the_curve_unsign": "APG area (unsigned)",
         "area_under_the_curve_sign": "AUC\n[signed]",
     }
-    # print([i for i in ax.get_xticklabels()])
-    # print([tick_labels.get(label, label) for label in ax.get_xticklabels()])
-    ax.set_xticklabels([tick_labels[label._text] for label in ax.get_xticklabels()]) # , rotation=45)
-    ax.set_yticklabels([tick_labels[label._text] for label in ax.get_yticklabels()]) #  rotation=45)
-    # ax.set_yticklabels([tick_labels.get(label, label) for label in ax.get_yticklabels()])
+    
+    ax.set_xticklabels([tick_labels[label._text] for label in ax.get_xticklabels()])
+    ax.set_yticklabels([tick_labels[label._text] for label in ax.get_yticklabels()])
 
     fig.tight_layout()
     for ext in IMAGE_FORMATS:
@@ -302,7 +290,7 @@ def multivariate_regression(
     cont_vars: list[str],
     cat_vars:  list[str],
     variable_to_predict: str = "rise_time_ms",
-    tag: str | None = None,          # appended to filenames
+    tag: str | None = None, # appended to filenames
 ) -> None:
     # --- design matrix ----------------------------------------------------
     X_num = df[cont_vars].values
@@ -314,15 +302,6 @@ def multivariate_regression(
     else:
         X = X_num
         feature_names = cont_vars
-
-
-# def multivariate_regression(df: pd.DataFrame, variable_to_predict: str = "rise_time_ms"):
-#     # --- design matrix ----------------------------------------------------
-#     X_num = df[PREDICTORS_CONT].values
-#     ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
-#     X_cat = ohe.fit_transform(df[PREDICTORS_CAT])
-#     X = np.hstack([X_num, X_cat])
-#     feature_names = PREDICTORS_CONT + ohe.get_feature_names_out(PREDICTORS_CAT).tolist()
 
     # --- remove nans from X and y ----------------------------- (only important due to fitzpatrick_scale)
     mask = ~np.isnan(X).any(axis=1) & ~np.isnan(df[variable_to_predict])
@@ -441,7 +420,6 @@ def main(argv: List[str] | None = None):
 
     INFLECTION_THR = args.inflect_thr      # global so helper can read it
 
-
     # ── classification ───────────────────────────────────────────────
     if args.classify: 
         logging.info("Classifying pulse waves …")
@@ -456,11 +434,6 @@ def main(argv: List[str] | None = None):
         elif args.classify and not args.analyse:
             logging.info("Classes already present – nothing to do.")
 
-        # if args.plot_auc:
-        #     plot_waves_with_auc(data_dict, n_examples=6)
-
-
-
     # ── analysis ───────────────────────────────────────────────
     if args.analyse:
         logging.info("Running analysis on %d entries", len(data_dict))
@@ -474,10 +447,6 @@ def main(argv: List[str] | None = None):
 
             correlation_heatmap(df, tag=set_name)
             rise_time_hist(df, tag=set_name)
-
-            # multivariate_regression(df, variable_to_predict="rise_time_ms")
-            # # multivariate_regression(df, variable_to_predict="rise_time_norm")
-            # multivariate_regression(df, variable_to_predict="area_under_the_curve_sign")
 
             pred_cont = PREDICTOR_SETS[set_name]["cont"]
             pred_cat  = PREDICTOR_SETS[set_name]["cat"]
