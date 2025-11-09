@@ -2,17 +2,6 @@
 
 A toolkit for preprocessing, analysing, and comparing photoplethysmography (PPG) pulse waves recorded at the wrist. It combines a custom pipeline wrapped around the [pyPPG](pyPPG) library to extract fiducials, derivatives, and morphological features from datasets such as [AURORA‑BP](https://ieeexplore.ieee.org/document/9721156) and [MAUS](https://ieee-dataport.org/open-access/maus-dataset-mental-workload-assessment-n-back-task-using-wearable-sensor).
 
-## Repository layout
-
-```
-notebooks/            The entry point into the pipelines. Run individual scripts to conveniently process and analyze the data
-initialize.py         User configurable paths and output directories
-
-preprocessing/        Pre‑ and post‑processing pipeline
-analysis/             Wave classification and statistical analysis
-pyPPG/                Embedded copy of the pyPPG library
-```
-
 ## Installation
 
 1. Create a conda environment from the given environment.yaml file:
@@ -36,3 +25,13 @@ The `notebooks/` directory provides jupyter notebooks that conveniently lead thr
 - `03_plotting_derivations_AURORA.ipynb` – additional derivation and plotting experiments.
 - `04_comparing_fPPG_and_wPPG_PWs_for_MAUS` - comparison of wrist and finger pulse wave morphologies.
 
+## Repository layout
+
+```
+notebooks/            The entry point into the pipelines. Run individual scripts to conveniently process and analyze the data
+initialize.py         User configurable paths and output directories
+----
+preprocessing/        Pre‑ and post‑processing pipeline
+analysis/             Wave classification and statistical analysis
+pyPPG/                Embedded copy of the pyPPG library
+```
