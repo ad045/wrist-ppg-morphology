@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import neurokit2 as nk
 
-from initialize import (  # project‑specific path constants
+from initialize import (  
     RAW_MAUS_DATA_PATH,
     PREPROCESSED_MAUS_DATA_PATH,
 )
@@ -25,7 +25,6 @@ def durations_one_file(fpath: Path, fs: int, recording_site: str) -> list[float]
     """Return beat-to-beat durations (ms) for a single CSV."""
     if recording_site == "finger": 
         df = pd.read_csv(fpath, index_col=0)
-        # print("Got this file: \n", df.head())
         sig = df["Resting_PPG"]
     elif recording_site == "wrist":
         df = pd.read_csv(fpath, index_col=None)
@@ -35,10 +34,8 @@ def durations_one_file(fpath: Path, fs: int, recording_site: str) -> list[float]
         raise ValueError(f"Unknown recording site: {recording_site}")
 
     cleaned = nk.ppg_clean(sig, sampling_rate=fs)
-    # print(cleaned)
     ppg_peaks = nk.ppg_findpeaks(cleaned, sampling_rate=fs, show=True)
-    # print(ppg_peaks.keys())
-    peaks = ppg_peaks["PPG_Peaks"] # .keys() # ["PPG_R_Peaks"]
+    peaks = ppg_peaks["PPG_Peaks"]
     # difference → samples → milliseconds
     return np.diff(peaks) / fs * 1_000
 
@@ -56,10 +53,7 @@ def main():
 
     print("[INFO] Processing files for device:", args.device)
     print("[INFO] Raw data path:", args.raw_path)
-    for subj in sorted(args.raw_path.glob("*")):               # 001/, 002/…
-
-        # /Users/adrian/Documents/01_projects/00_ppg_project/data/MAUS/raw/Raw_data/008/pixart_resting.csv
-        # /Users/adrian/Documents/01_projects/00_ppg_project/data/MAUS/raw/Raw_data/008/inf_resting.csv
+    for subj in sorted(args.raw_path.glob("*")):
 
         csv_file = subj / ("pixart_resting.csv" if args.device == "wrist" else "inf_resting.csv") 
         print(f"[INFO] Processing subject: {subj.name}  →  {csv_file}")

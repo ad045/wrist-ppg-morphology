@@ -1,22 +1,10 @@
 #!/usr/bin/env ppg_project
 """
-AURORA | MAUS – wave-class labelling & regression analysis
-=========================================================
-
-**What this script does**
--------------------------
-1. **Classify every pulse wave** according to the five-class decision tree (adds *individual_waves_classes* & *ensemble_class* to the dict).
-2. **Run statistics & create figures**
-   * univariate scatter/OLS line plots
-   * correlation heat-map
-   * rise-time histogram
-   * multivariate *and* statsmodels OLS regression (z-normalised inputs)
-3. **Save outputs**
-   * figures → `output/regression/figures/*.png` & `*.pdf`
-   * coefficient CSV (`output/regression/tables/coefficients.csv`)
-   * pretty LaTeX table of coefficients (`output/regression/tables/coefficients.tex`)
-   * full statsmodels summary as LaTeX (`output/regression/tables/ols_summary.tex`) *and* as txt file (`output/regression/tables/ols_summary.txt`)
-   * updated data_dict with classes → `*_with_classes.pt`
+Wave-class labelling & regression analysis
+This script performs wave-shape classification of PPG pulse waves using a
+five-class decision tree based on inflection points and peak structure. It then
+runs univariate and multivariate regression analyses to predict rise-time
+from demographic and physiological predictors.
 """
 
 from __future__ import annotations
@@ -53,7 +41,7 @@ from initialize import (
     IMAGE_FORMATS,
 )
 
-# ───────────────────────────── configuration ──────────────────────────────
+# Config
 DEFAULT_DICT_PATH = Path(PREPROCESSED_AURORA_DATA_PATH) / "data_dict_osc_auc_with_derivatives.pt"
 
 FIG_DIR   = Path(OUTPUT_REGRESSION_PATH) / "figures"
@@ -71,8 +59,7 @@ PREDICTORS_CAT  = [
     "pressure_quality", "optical_quality", "oscillo_or_auscul",
 ]
 
-# ───────────────── predictor-set presets ────────────────────────────
-
+# Predictor-set presets 
 PREDICTOR_SETS: dict[str, dict[str, list[str]]] = { # Include all variable sets to use in the analysis here 
     "all": { # all variables, including categorical
         "cont": PREDICTORS_CONT,
@@ -98,29 +85,31 @@ TARGETS = ["rise_time_ms", "rise_time_norm"]
 # Configuration parameters for area under curve (AUC) calculation
 AUC_START, AUC_END = 200, 800 # sample range used for APG area (inclusive)
 
-# ─────────────────────── wave-shape classification helpers ─────────────────
+# Helpers for wave-shape classification  
 
 def _smooth(y: np.ndarray, window: int = 11, poly: int = 3) -> np.ndarray:
-    """Savitzky–Golay smoothing with fallback for short waves."""
+    """Savitzky-Golay smoothing with fallback for short waves."""
     return y if len(y) < window else signal.savgol_filter(y, window, poly)
 
 
 def _auc_apg(apg_wave: np.ndarray,
              start: int = AUC_START,
              end:   int = AUC_END) -> float:
-    """Unsigned APG area between *start* and *end* samples (NaN if too short)."""
+    """Unsigned APG area between start and end samples (NaN if too short)."""
     mask = apg_wave > 0
     wave = apg_wave*mask
     return float(np.trapezoid(wave[start:end+1]))
 
 
 def _inflection_before_after(y: np.ndarray, peak_idx: int, threshold=1e-3) -> Tuple[bool, bool]:
-    """Detect whether *a* zero-crossing of the 2nd derivative exists **before**
-    and/or **after** the main peak.  A small hysteresis avoids noise."""
+    """Detect whether a zero-crossing of the 2nd derivative exists before
+    and/or after the main peak.  A small hysteresis avoids noise."""
     d2 = np.gradient(np.gradient(y))
+    
     # hysteresis: ignore crossings where |d2| > thr on either side
     thr = threshold
     zc = np.where(np.diff(np.sign(d2)))[0]
+    
     # introduce area in which inflection points "count".
     left_boundary = 200 
     right_boundary = 600 
@@ -132,28 +121,28 @@ def _inflection_before_after(y: np.ndarray, peak_idx: int, threshold=1e-3) -> Tu
 
 
 def classify_wave(wave: np.ndarray, threshold) -> int:
-    """Return class **1-5** (0 = invalid) following the decision tree."""
+    """Return class 1-5 (0 = invalid) following the decision tree."""
     if wave.size == 0 or np.all(np.isnan(wave)):
         return 0
 
     y = _smooth(wave)
     peaks, _ = signal.find_peaks(y, distance=len(y)//10)
 
-    # ── branch: two local maxima ──────────────────────────────────────────
+    # Branch: two local maxima
     if len(peaks) >= 2:
         top2 = peaks[np.argsort(y[peaks])][-2:]
         top2.sort()
         first, second = top2
         return 1 if y[first] > y[second] else 5
 
-    # ── branch: one local maximum ─────────────────────────────────────────
+    # Branch: one local maximum
     peak = int(peaks[0]) if len(peaks) else int(np.argmax(y))
     before, after = _inflection_before_after(y, peak, threshold=threshold)
     if before:
-        return 4  # inflection before max → Class 4
+        return 4  # inflection before max → Class 4
     if after:
-        return 2  # inflection after max  → Class 2
-    return 3      # no inflection         → Class 3
+        return 2  # inflection after max  → Class 2
+    return 3      # no inflection         → Class 3
 
 
 def label_entry(entry: Dict[str, Any], threshold) -> None:
@@ -168,7 +157,7 @@ def label_entry(entry: Dict[str, Any], threshold) -> None:
     entry["ensemble_class"] = int(classify_wave(entry.get("ensemble_wave", np.empty(0)), 
                                                 threshold=threshold))
 
-    # ───────────────── APG area (unsigned & signed) ──────────────────
+    # APG area (unsigned & signed) 
     auc_waves = np.array([_auc_apg(w) for w in apg_waves])
     sign_wave_factor  = np.where(np.isin(classes, [1, 2]), -1, 1)
     entry["area_under_the_curve_unsign_wave"] = auc_waves
@@ -180,8 +169,7 @@ def label_entry(entry: Dict[str, Any], threshold) -> None:
     entry["area_under_the_curve_sign"]    = ens_sign * ens_auc
 
 
-# ────────────────────────── dataframe & plotting helpers ───────────────────
-
+# Helpers: dataframe & plotting 
 def _make_dataframe(data_dict: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
     rows = []
     for pid, d in data_dict.items():
@@ -201,8 +189,7 @@ def _make_dataframe(data_dict: Dict[str, Dict[str, Any]]) -> pd.DataFrame:
         df[c] = df[c].astype("category")
     return df
 
-# ---------- univariate scatter ----------
-
+# Helpers: univariate scatter
 def _scatter(ax, x, y, xl):
     sns.regplot(x=x, y=y, ax=ax, scatter_kws={"s": 20}, line_kws={"lw": 1})
     if x.notna().any() and y.notna().any():
@@ -233,8 +220,7 @@ def univariate_plots(
         fig.savefig(FIG_DIR / f"univariate_corr{f'_{tag}' if tag else ''}.{ext}")
     plt.close(fig)
 
-# ---------- corr heat-map ----------
-
+# Corr heat-map
 def correlation_heatmap(
         df: pd.DataFrame, 
         tag: str | None = None):
@@ -271,8 +257,7 @@ def correlation_heatmap(
         fig.savefig(FIG_DIR / f"corr_heatmap{f'_{tag}' if tag else ''}.{ext}")
     plt.close(fig)
 
-# ---------- histogram ----------
-
+# Histogram
 def rise_time_hist(
         df: pd.DataFrame,
         tag: str | None = None):
@@ -284,7 +269,7 @@ def rise_time_hist(
         fig.savefig(FIG_DIR / f"rise_time_hist{f'_{tag}' if tag else ''}.{ext}")
     plt.close(fig)
 
-# ---------- linear regression (sklearn + statsmodels) ----------
+# Linear regression (sklearn + statsmodels)
 def multivariate_regression(
     df: pd.DataFrame,
     cont_vars: list[str],
@@ -292,7 +277,7 @@ def multivariate_regression(
     variable_to_predict: str = "rise_time_ms",
     tag: str | None = None, # appended to filenames
 ) -> None:
-    # --- design matrix ----------------------------------------------------
+    # Design matrix 
     X_num = df[cont_vars].values
     if cat_vars:
         ohe = OneHotEncoder(handle_unknown="ignore", sparse_output=False)
@@ -303,18 +288,18 @@ def multivariate_regression(
         X = X_num
         feature_names = cont_vars
 
-    # --- remove nans from X and y ----------------------------- (only important due to fitzpatrick_scale)
+    # Remove nans from X and y (only important due to fitzpatrick_scale)
     mask = ~np.isnan(X).any(axis=1) & ~np.isnan(df[variable_to_predict])
     X = X[mask]
     df = df[mask]
     print(f"There were {np.any(mask)} rows with NaNs in X or y, which were removed.")
 
-    # --- scale ------------------------------------------------------------
+    # Scale
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     y = df[variable_to_predict].values
 
-    # sklearn (for coefficient CSV) ---------------------------------------
+    # sklearn (for coefficient CSV)
     lin = LinearRegression().fit(X_scaled, y)
     r2 = lin.score(X_scaled, y)
 
@@ -330,7 +315,7 @@ def multivariate_regression(
     with open(TAB_DIR / f"coefficients_for_{variable_to_predict}.tex", "w") as f:
         f.write(coef_df.to_latex(index=False, float_format="%.3f"))
 
-    # scatter actual vs pred ----------------------------------------------
+    # Scatter actual vs pred
     y_pred = lin.predict(X_scaled)
     fig, ax = plt.subplots(figsize=(5,5))
     ax.scatter(y, y_pred, s=15, alpha=0.7)
@@ -346,7 +331,7 @@ def multivariate_regression(
         fig.savefig(FIG_DIR / f"actual_vs_pred_{variable_to_predict}{suffix}.{ext}")
     plt.close(fig)
 
-    # statsmodels OLS (for pretty summary) ---------------------------------
+    # statsmodels OLS (for pretty summary)
     X_sm = pd.DataFrame(X_scaled, columns=feature_names) # give columns names
     X_sm = sm.add_constant(X_sm, prepend=True)  # add intercept term
 
@@ -379,8 +364,7 @@ def _get_variable_name_alias(variable_to_predict):
     return variable_name_alias
 
 
-# ─────────────────────────────── CLI helpers ───────────────────────────────
-
+# Helpers: CLI
 def build_parser():
     p = argparse.ArgumentParser("Wave-class labelling & analysis")
     p.add_argument("--dict_path", type=Path, default=DEFAULT_DICT_PATH,
@@ -400,14 +384,13 @@ def build_parser():
 
     return p
 
-# ────────────────────────────────── main ───────────────────────────────────
-
+# Main
 def main(argv: List[str] | None = None):
     args = build_parser().parse_args(argv)
     logging.basicConfig(format="%(levelname)s: %(message)s",
                         level=logging.DEBUG if args.verbose else logging.INFO)
 
-    # ── load data_dict ───────────────────────────────────────────────
+    # Load data 
     logging.info("Loading → %s", args.dict_path)
     data_dict: Dict[str, Dict[str, Any]] = torch.load(args.dict_path, weights_only=False)
 
@@ -420,7 +403,7 @@ def main(argv: List[str] | None = None):
 
     INFLECTION_THR = args.inflect_thr      # global so helper can read it
 
-    # ── classification ───────────────────────────────────────────────
+    # Classification
     if args.classify: 
         logging.info("Classifying pulse waves …")
         need_classes = any("ensemble_class" not in e for e in data_dict.values())
@@ -432,9 +415,9 @@ def main(argv: List[str] | None = None):
             torch.save(data_dict, out_pt)
             logging.info("Classes written to %s", out_pt)
         elif args.classify and not args.analyse:
-            logging.info("Classes already present – nothing to do.")
+            logging.info("Classes already present - nothing to do.")
 
-    # ── analysis ───────────────────────────────────────────────
+    # Analysis
     if args.analyse:
         logging.info("Running analysis on %d entries", len(data_dict))
 

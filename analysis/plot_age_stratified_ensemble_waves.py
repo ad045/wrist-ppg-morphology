@@ -1,8 +1,6 @@
 # !/usr/bin/env ppg_project
 """
-Plot ensemble PPG waves stratified by age groups
-================================================
-
+Plot ensemble PPG waves stratified by age groups: 
 This script loads a preprocessed `data_dict_*.pt` (PyTorch) file containing
 ensemble PPG waveforms and associated subject metadata, bins subjects into
 defined age groups, and plots all ensemble waves in each bin for visual

@@ -1,37 +1,33 @@
 #!/usr/bin/env ppg_project
 """
-AURORA **pre‑processing & post‑processing** pipeline
-===================================================
-This single script now covers both stages that were previously split across
-`preprocessing.py` and `processing.py`:
+AURORA pre- and post-processing pipeline for both oscillometric and auscultatory data.
 
-1. **Raw‑data pre‑processing** (unchanged):
-   * loads participant metadata & raw optical waveforms,
-   * runs *pyPPG* once per subject,
-   * detects onsets, extracts individual beats, builds an ensemble beat and its
-     higher‑order derivatives,
-   * stores everything in a **`data_dict_*.pt`** file.
+1. Pre-processing: 
+    - load participants' metadata and raw optical waveforms,
+    - run pyPPG once per subject as part of preprocessing, 
+    - detects onsets, extracts individual beats, builds an ensemble beat and its higher-order derivatives,
+    - stores everything in a `data_dict_*.pt` file.
 
-2. **Optional post‑processing** (new):
-   * filters individual pulse waves (PWs) whose samples 300‑600 fall below a
-     chosen threshold (`--lower_threshold`, default **−0.1**),
-   * recomputes the ensemble beat (and, unless `--skip_derivatives` is passed,
-     also its VPG/APG/JPG derivatives via *pyPPG*),
-   * writes a new `*_filtered.pt` dictionary next to the original file.
+2. Post-processing (optional): 
+    - filters individual pulse waves based on a threshold (more precisely: Whose values in the 30-60% segment of the wave fall below a threshold - choose 
+    the threshold with `--lower_threshold`, default -0.1),
+    - recomputes the ensemble beat, and, unless `--skip_derivatives` is passed,
+     also its VPG/APG/JPG derivatives via pyPPG, 
+    - writes a new`*_filtered.pt` dictionary next to the original file.
 
-Usage examples
---------------
-**Full pipeline** (pre + post in one go):
-```bash
-python -m preprocessing \
-       --lower_threshold -0.15
-```
 
-**Just post‑process an existing dictionary**:
-```bash
-python -m preprocessing \
-       --lower_threshold -0.1
-```
+Usage examples: 
+    - Full pipeline (pre + post): 
+        ```bash
+        python -m preprocessing \
+            --lower_threshold -0.15
+        ```
+        
+    - Post-process only:
+        ```bash
+        python -m preprocessing \
+            --lower_threshold -0.1
+        ```
 """
 from __future__ import annotations
 
@@ -50,18 +46,12 @@ from pyPPG import PPG, Fiducials
 import pyPPG.preproc as PP
 import pyPPG.fiducials as FP
 
-from initialize import (  # project‑specific path constants
+from initialize import (  # project-specific path constants
     RAW_AURORA_DATA_PATH,
     PREPROCESSED_AURORA_DATA_PATH,
     RAW_MAUS_DATA_PATH,
     PREPROCESSED_MAUS_DATA_PATH,
 )
-
-# Combined preprocessing script for both oscillometric and auscultatory datasets.
-# It loads metadata, filters participants, reads raw optical waveforms,
-# computes sampling frequency, processes the raw signal with pyPPG to compute derivatives,
-# splits the signal into individual waves, computes an ensemble wave, average HR,
-# and finally computes derivatives for both the ensemble and individual waves.
 
 
 def process_with_pyPPG_for_subject(subj_data, pid):
@@ -190,9 +180,7 @@ def load_data(raw_path, dataset_type="oscillometric"):
     ]
     return no_comorb_df, waveform_base_path
 
-# -----------------------------------------------------------------------------
-# MAUS *resting* loader
-# -----------------------------------------------------------------------------
+
 def load_data_maus_rest( 
         raw_path: Path,
         recording_site: str = "finger",     # "finger" (Procomp) or "wrist" (PixArt)
@@ -200,22 +188,16 @@ def load_data_maus_rest(
     """
     Build a DataFrame of MAUS resting segments only.
 
-    Parameters
-    ----------
-    raw_path : Path
-        .../MAUS/raw/Raw_data (contains 002/, 004/, 012/, ...).
-    recording_site : {"finger", "wrist"}
-        • finger → inf_resting.csv   (fs = 256 Hz)
-        • wrist  → pixart_resting.csv (fs = 100 Hz)
+    Args:
+        - raw_path (Path): The path to the raw data directory.
+        - recording_site (str): The recording site ("finger" or "wrist").
 
-    Returns
-    -------
-    df : DataFrame
-        Columns that the existing pipeline expects.
-    waveform_base_path : Path
-        The same *raw_path* is returned so `create_data_dict` can build full paths.
+    Returns: 
+        - df : DataFrame
+        - waveform_base_path : Path
     """
-    # ------------- setup per device -----------------------------------------
+    
+    # setup per device
     if recording_site == "finger":
         file_name = "inf_resting.csv"
         ppg_column = "Resting_PPG"      # inside inf_resting.csv
@@ -272,16 +254,7 @@ def create_data_dict(no_comorb_df, waveform_base_path):
         raw_file_name = os.path.basename(row["waveform_file_path"])
         full_wave_path = os.path.join(waveform_base_path, str(pid), raw_file_name)
 
-
-        # try:
-        #     wave_df = pd.read_csv(full_wave_path, sep='\t')
-        # except Exception as e:
-        #     print(f"Error loading {full_wave_path}: {e}")
-        #     continue
-        # optical = wave_df["optical"].to_numpy()
-        # time_array = wave_df["t"].to_numpy()
-
-        # Check if we have a MAUS sample (could be done cleaner)
+        # Check if we have a MAUS sample 
         if "extra_ppg_col" in row:        # ← MAUS resting file
             wave_df = pd.read_csv(full_wave_path)           # comma-separated
             ppg_col = row["extra_ppg_col"]                  # Resting_PPG  or  Resting
@@ -301,9 +274,11 @@ def create_data_dict(no_comorb_df, waveform_base_path):
         data_dict[pid]["raw_optical"] = optical
         data_dict[pid]["delta_t"] = delta_t
         data_dict[pid]["sampling_rate"] = sampling_rate
+        
     return data_dict
 
-# --- Processing Steps ---
+
+# Processing steps
 
 def process_all_subjects(data_dict):
     """
@@ -419,14 +394,13 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
         # get rime times for each wave
         for (wave, duration) in zip(waves, durations_waves):
             peak_idx = np.argmax(wave)
-            # print(len(wave), peak_idx, duration)
+            
             # get rise time, also considering duration (time from onset to peak)
             rise_time_norm = peak_idx / len(wave)
             rise_times_norm.append(rise_time_norm)
             rise_time_ms = peak_idx / len(wave) * duration
             rise_times_ms.append(rise_time_ms)    
-            # print("rise time norm", rise_time_norm)
-            # print("rise time ms", rise_time_ms)
+            
         subj_data["rise_times_norm"] = rise_times_norm 
         subj_data["rise_times_ms"] = rise_times_ms
         
@@ -435,11 +409,6 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
         avg_rise_time_ms = np.median(rise_times_ms)
         subj_data["average_rise_time_norm"] = avg_rise_time_norm
         subj_data["average_rise_time_ms"] = avg_rise_time_ms    
-                
-        # Print per subject to check 
-        # print(f"Subject {pid}: {len(waves)} waves, avg HR = {avg_hr_bpm:.2f} bpm")
-        # print(f"Subject {pid}: avg rise time norm = {avg_rise_time_norm:.2f}, avg rise time ms = {avg_rise_time_ms:.2f}")
-
         
         # Compute ensemble wave
         if len(waves) > 0:
@@ -448,25 +417,8 @@ def step4_improved(data_dict, expected_period_sec=1.0, min_prominence=0.02, resa
         else:
             ensemble = np.zeros(resample_length)
         subj_data["ensemble_wave"] = ensemble
-        # processed_ensemble = process_ppg_wave(ensemble)
-        
-        # try:
-        #     ppg_11, vpg_11, apg_11, jpg_11 = compute_derivatives_pyppg(processed_ensemble, fs=1000)
-        # except Exception as e:
-        #     print(f"Error computing ensemble derivatives for {pid}: {e}")
-        #     ppg_11 = vpg_11 = apg_11 = jpg_11 = np.zeros(resample_length)
-            
-        # This is not used afterwards, but kept for consistency with prior scripts  !!! TODO: check if needed, maybe remove later
-        # ppg_11, vpg_11, apg_11, jpg_11 = compute_derivatives_pyppg(ensemble, fs=1000)
-        # subj_data.update({
-        #     "ensemble_ppg": ppg_11,
-        #     "ensemble_vpg": vpg_11,
-        #     "ensemble_apg": apg_11,
-        #     "ensemble_jpg": jpg_11
-        # })
 
         # Compute derivatives for each individual wave
-        # individual_waves_derivatives = []
         ippg_arr = []
         ivpg_arr = []
         iapg_arr = []
@@ -564,12 +516,11 @@ def pipeline(dataset_type, raw_path, preprocessed_path):
 
     return "completed - saved as " + str(final_file)
 
-# -----------------------------------------------------------------------------
-# 0.  Generic helpers (identical to original script)
-# -----------------------------------------------------------------------------
+
+# Helper functions
 
 def detrend_and_normalize(wave: np.ndarray) -> np.ndarray:
-    """Detrend PPG *wave* and min‑max normalise it to the **[-1, 1]** range."""
+    """Detrend PPG *wave* and min-max normalise it to the [-1, 1] range."""
     trend = np.linspace(wave[0], wave[-1], len(wave))
     det = wave - trend
     mn, mx = det.min(), det.max()
@@ -577,13 +528,12 @@ def detrend_and_normalize(wave: np.ndarray) -> np.ndarray:
 
 
 def compute_derivatives_pyppg(ensemble_wave: np.ndarray, fs: int = 1_000):
-    """Extract 0‑th…3‑rd derivatives of *ensemble_wave* via *pyPPG*.
+    """Extract 0-th…3-rd derivatives of ensemble_wave via pyPPG.
 
-    The beat is tiled 20× so that filtering edge effects are far away; the
-    derivatives of the 11‑th copy (index 10) are returned.
+    The beat is tiled 20x so that filtering edge effects are far away; the
+    derivatives of the 11-th copy (index 10) are returned.
     """
-    # --- lazy imports so that the post‑processing stage can run even if pyPPG
-    #     is not available (when derivatives are skipped) ------------------
+
     from dotmap import DotMap
     import pyPPG.preproc as PP
 
@@ -600,56 +550,6 @@ def compute_derivatives_pyppg(ensemble_wave: np.ndarray, fs: int = 1_000):
     return ppg[seg], vpg[seg], apg[seg], jpg[seg]
 
 
-
-# -----------------------------------------------------------------------------
-# 2.  New post‑processing helpers (imported by both modes)
-# -----------------------------------------------------------------------------
-
-# def _filter_waves(entry: dict, lower_threshold: float) -> tuple[int, int]:
-#     """Drop PWs whose samples 300‑600 are below *lower_threshold*.
-
-#     Returns a tuple with the number of waves **before** and **after** filtering.
-#     """
-#     before = entry.get("individual_waves", [])
-#     after = [w for w in before if len(w) >= 600 and not np.any(w[300:601] < lower_threshold)]
-#     entry["individual_waves"] = after
-#     return len(before), len(after)
-
-
-# def _recompute_ensemble_and_derivatives(entry: dict, skip_derivatives: bool):
-#     """Recalculate ensemble beat and, optionally, its derivatives."""
-#     waves = entry.get("individual_waves", [])
-#     ensemble = np.mean(waves, axis=0) if waves else np.zeros(1_000)
-#     entry["ensemble_ppg"] = ensemble
-
-#     if not skip_derivatives and ensemble.size:
-#         proc = detrend_and_normalize(ensemble) # normalized to [-1, 1]
-#         ppg, vpg, apg, jpg = compute_derivatives_pyppg(proc)
-#         entry.update(ensemble_vpg=vpg, ensemble_apg=apg, ensemble_jpg=jpg)
-
-
-# def postprocess_file(pt_path: Path, *, lower_threshold: float, skip_derivatives: bool):
-#     """Clean **`pt_path`** in‑place and write a sibling *_filtered.pt* file."""
-#     print(f"[INFO] Loading → {pt_path}")
-#     data_dict = torch.load(pt_path, weights_only=False)
-
-#     kept, total = 0, 0
-#     for entry in data_dict.values():
-#         b, a = _filter_waves(entry, lower_threshold)
-#         _recompute_ensemble_and_derivatives(entry, skip_derivatives)
-#         kept += a
-#         total += b
-#     if total == 0:        # nothing to filter
-#             print("[WARN] dictionary contains no waves – skipping filtering step")
-#             return
-#     print(f"[INFO] Kept {kept}/{total} waves ({kept/total*100:.1f} %)")
-
-#     out = pt_path.with_name(pt_path.stem + "_filtered.pt")
-#     torch.save(data_dict, out)
-#     print(f"[INFO] Saved cleaned dictionary → {out}")
-#     return out
-
-
 def _paths(dataset_type: str, raw_override: Path | None, out_override: Path | None):
     """Return paths to raw and preprocessed data folders. If user gives paths as flags, they will be used - otherwise, paths from 'initialize.py' will be used."""
     if dataset_type.startswith("maus"):
@@ -660,10 +560,6 @@ def _paths(dataset_type: str, raw_override: Path | None, out_override: Path | No
         out = out_override  if out_override  else PREPROCESSED_AURORA_DATA_PATH
     return raw, out
 
-
-# -----------------------------------------------------------------------------
-# 3.  CLI entry point – ties everything together
-# -----------------------------------------------------------------------------
 
 def _parse_args():
     p = argparse.ArgumentParser("Universal PPG pipeline")
@@ -676,20 +572,17 @@ def _parse_args():
     p.add_argument("--raw_path",       type=Path, help="Override default raw folder")
     p.add_argument("--output_path",    type=Path, help="Override default output folder")
     
-    # Raw‑data stage flags (no changes)
+    # Raw-data stage flags (no changes)
     p.add_argument("--skip_raw", action="store_true", help="Skip raw preprocessing stage entirely")
 
-    # Post‑processing flags
-    g = p.add_argument_group("post‑processing options")
-    # g.add_argument("--post_filter", action="store_true", help="Run filtering pass after raw preprocessing")
-    # g.add_argument("--filter_only", action="store_true", help="Only run the filtering pass on an existing *.pt file")
-    # g.add_argument("--input_file", type=Path, help="Path to an existing *.pt file (required with --filter_only)")
-    g.add_argument("--lower_threshold", type=float, default=-0.1, help="Threshold for PW mid‑segment test (default −0.1)")
-    g.add_argument("--skip_derivatives", action="store_true", help="Do *not* rebuild derivatives during post‑processing")
+    # Post-processing flags
+    g = p.add_argument_group("post-processing options")
+    g.add_argument("--lower_threshold", type=float, default=-0.1, help="Threshold for PW mid-segment test (default −0.1)")
+    g.add_argument("--skip_derivatives", action="store_true", help="Do *not* rebuild derivatives during post-processing")
     return p.parse_args()
 
 
-def main():  # noqa: D401 – simple main wrapper
+def main(): 
 
     warnings.filterwarnings("ignore", category=FutureWarning)  # pandas noise
 
@@ -701,27 +594,18 @@ def main():  # noqa: D401 – simple main wrapper
     raw_path = Path(raw_path)
     preprocessed_path = Path(preprocessed_path)
     
-    # if args.filter_only:
-    #     print("Does not do anything right now any more. TODO: Remove this option.")
-    #     # if args.input_file is None:
-    #     #     raise SystemExit("[ERROR] --filter_only requires --input_file")
-    #     # postprocess_file(args.input_file, lower_threshold=args.lower_threshold, skip_derivatives=args.skip_derivatives)
-    #     return
-    
     if not args.skip_raw:
         print("Raw stage is going to be performed (no --skip_raw)")
 
-        # ---------------------------------------------------------------------
         # Decide which dataset(s) to run (AURORA or MAUS)
-        # ---------------------------------------------------------------------
         if args.dataset_type.startswith("aurora"):
             datasets_to_run = ["oscillometric"] if args.dataset_type == "aurora_osc" \
                             else ["auscultatory"] if args.dataset_type == "aurora_auc" \
-                            else ["oscillometric", "auscultatory"]          # fallback
+                            else ["oscillometric", "auscultatory"]          # fallback: do both
         else:           # MAUS
             datasets_to_run = ["maus_finger"] if args.dataset_type == "maus_finger" \
                 else ["maus_wrist"] if args.dataset_type == "maus_wrist" \
-                else ["maus_finger", "maus_wrist"]  # fallback
+                else ["maus_finger", "maus_wrist"]  # fallback: do both
         print(f"Running datasets: {datasets_to_run}")
 
         out_files = []
@@ -731,9 +615,7 @@ def main():  # noqa: D401 – simple main wrapper
             pipeline(dataset_type=ds, raw_path=_raw, preprocessed_path=_out)
             out_files.append(_out / f"data_dict_{ds}.pt")
 
-        # ---------------------------------------------------------------------
         # Only merge if we actually processed BOTH AURORA sets
-        # ---------------------------------------------------------------------
         if set(datasets_to_run) == {"oscillometric", "auscultatory"}:
             print("Merging datasets and adding regressors")
             merge_datasets_and_add_regressors(preprocessed_path)
@@ -743,37 +625,19 @@ def main():  # noqa: D401 – simple main wrapper
         out_files = []
 
 
-    # ---------------------------------------------------------------------
-    # Optional post‑processing immediately after raw stage
-    # # ---------------------------------------------------------------------
-    # if args.post_filter:
-    #     print("\n=== Post‑processing stage ===")
-    #     print("Does not do anything right now any more. TODO: Remove this option.")
-        # targets = out_files if out_files else [*Path(PREPROCESSED_AURORA_DATA_PATH).glob("data_dict_*.pt")]
-        # for pt in targets:
-        #     postprocess_file(pt, lower_threshold=args.lower_threshold, skip_derivatives=args.skip_derivatives)
-
-
-# -----------------------------------------------------------------------------
-# 4.  Run as script
-# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     main()
 
-# Run the full pipeline (raw → post)	    python -m preprocessing --post_filter --lower_threshold -0.15
-# Just post-process an existing dict	    python -m preprocessing --filter_only --input_file /path/to/data_dict.pt --lower_threshold -0.1
+# Example usages:
+
+    # python -m preprocessing \
+    #        --dataset_type maus_finger \
+    #        --raw_path   "/Users/adrian/Documents/01_projects/00_ppg_project/data/MAUS/raw/Raw_data" \                 # can be left empty to use the default path
+    #        --output_path "/Users/adrian/Documents/01_projects/00_ppg_project/data/MAUS/preprocessed" \                # can be left empty to use the default path
+    #        --post_filter
 
 
-
-# NEW 
-# python -m preprocessing \
-#        --dataset_type maus_finger \
-#        --raw_path   "/Users/adrian/Documents/01_projects/00_ppg_project/data/MAUS/raw/Raw_data" \                 # can be left empty to use the default path
-#        --output_path "/Users/adrian/Documents/01_projects/00_ppg_project/data/MAUS/preprocessed" \                # can be left empty to use the default path
-#        --post_filter
-
-# NEW 
-#                                   python -m preprocessing.preprocessing --dataset_type aurora_osc --post_filter
+# AURORA osc:                       python -m preprocessing.preprocessing --dataset_type aurora_osc --post_filter
 # MAUS finger only	                python -m preprocessing.preprocessing --dataset_type maus_finger --post_filter
 # MAUS wrist, custom paths	        python -m preprocessing.preprocessing --dataset_type maus_wrist --raw_path ".../MAUS/raw/Raw_data" --output_path ".../MAUS/preprocessed"
-#                                   python -m preprocessing.preprocessing --dataset_type aurora --post_filter
+# AURORA                            python -m preprocessing.preprocessing --dataset_type aurora --post_filter
