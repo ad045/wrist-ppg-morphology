@@ -15,7 +15,7 @@ pyPPG/                Embedded copy of the pyPPG library
 
 ## Installation
 
-1. Create a Python 3.10+ environment and activate it.
+1. Create a conda environment from the given environment.yaml file:
    ```bash
    conda env create -f environment.yaml
    ```
