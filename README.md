@@ -1,6 +1,6 @@
-# Clean PPG Project
+# Wrist Photoplethysmography Pulse Waves: Morphological Classes and Physiological Influences 
 
-A toolkit for preprocessing, analysing, and comparing photoplethysmography (PPG) pulse waves recorded at the wrist. It combines a custom pipeline wrapped around the [pyPPG](pyPPG) library to extract fiducials, derivatives, and morphological features from datasets such as [AURORA‑BP](https://ieeexplore.ieee.org/document/9721156) and [MAUS](https://ieee-dataport.org/open-access/maus-dataset-mental-workload-assessment-n-back-task-using-wearable-sensor).
+Scripts for preprocessing, analysing, and comparing photoplethysmography (PPG) pulse waves recorded at the wrist. It combines a custom pipeline wrapped around the [pyPPG](pyPPG) library to extract fiducials, derivatives, and morphological features from datasets such as [AURORA‑BP](https://ieeexplore.ieee.org/document/9721156) and [MAUS](https://ieee-dataport.org/open-access/maus-dataset-mental-workload-assessment-n-back-task-using-wearable-sensor).
 
 
 
